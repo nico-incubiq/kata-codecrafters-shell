@@ -2,7 +2,13 @@
 use std::io::{self, Write};
 
 fn main() {
-    // Uncomment this block to pass the first stage
+    loop {
+        repl();
+    }
+}
+
+fn repl() {
+    // Print the prompt.
     print!("$ ");
     io::stdout().flush().unwrap();
 
