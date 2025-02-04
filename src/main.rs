@@ -7,20 +7,37 @@ fn main() {
         print!("$ ");
         io::stdout().flush().unwrap();
 
-        // Wait for user input
+        // Wait for user input.
         let stdin = io::stdin();
         let mut input = String::new();
         stdin.read_line(&mut input).unwrap();
 
-        let mut command = input.trim().split_ascii_whitespace();
-        match command.next() {
-            Some("exit") if command.next().is_some_and(|value| value == "0") => break,
-            Some("echo") => {
-                println!("{}", command.collect::<Vec<_>>().join(" "));
+        // Split the command and arguments.
+        let mut command = input
+            .trim()
+            .split_once(' ')
+            .map(|(a, b)| (a, Some(b)))
+            .unwrap_or_else(|| (input.trim(), None));
+
+        match command {
+            ("exit", Some("0")) => break,
+            ("echo", args) => {
+                println!("{}", args.unwrap_or_default());
             }
-            _ => {
-                eprintln!("{}: command not found", input.trim());
+            ("type", Some(cmd)) => {
+                if ["echo", "exit", "type"].contains(&cmd) {
+                    println!("{} is a shell builtin", cmd);
+                } else {
+                    command_not_found(cmd);
+                }
+            }
+            (cmd, _) => {
+                command_not_found(cmd);
             }
         }
     }
+}
+
+fn command_not_found(command: &str) {
+    eprintln!("{}: command not found", command);
 }
