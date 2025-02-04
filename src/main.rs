@@ -12,8 +12,12 @@ fn main() {
         let mut input = String::new();
         stdin.read_line(&mut input).unwrap();
 
-        match input.trim() {
-            "exit 0" => break,
+        let mut command = input.trim().split_ascii_whitespace();
+        match command.next() {
+            Some("exit") if command.next().is_some_and(|value| value == "0") => break,
+            Some("echo") => {
+                println!("{}", command.collect::<Vec<_>>().join(" "));
+            }
             _ => {
                 eprintln!("{}: command not found", input.trim());
             }
