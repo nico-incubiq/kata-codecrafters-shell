@@ -28,16 +28,12 @@ fn main() {
                 if ["echo", "exit", "type"].contains(&cmd) {
                     println!("{} is a shell builtin", cmd);
                 } else {
-                    command_not_found(cmd);
+                    eprintln!("{}: not found", cmd);
                 }
             }
             (cmd, _) => {
-                command_not_found(cmd);
+                eprintln!("{}: command not found", cmd);
             }
         }
     }
-}
-
-fn command_not_found(command: &str) {
-    eprintln!("{}: command not found", command);
 }
