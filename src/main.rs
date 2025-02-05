@@ -13,26 +13,17 @@ fn main() {
         stdin.read_line(&mut input).unwrap();
 
         // Split the command and arguments.
-        let mut command = input
-            .trim()
-            .split_once(' ')
-            .map(|(a, b)| (a, Some(b)))
-            .unwrap_or_else(|| (input.trim(), None));
+        let (command, args) = input.trim().split_once(' ').unwrap_or((input.trim(), ""));
 
         match command {
-            ("exit", Some("0")) => break,
-            ("echo", args) => {
-                println!("{}", args.unwrap_or_default());
-            }
-            ("type", Some(cmd)) => {
-                if ["echo", "exit", "type"].contains(&cmd) {
-                    println!("{} is a shell builtin", cmd);
-                } else {
-                    eprintln!("{}: not found", cmd);
-                }
-            }
-            (cmd, _) => {
-                eprintln!("{}: command not found", cmd);
+            "exit" if args == "0" => break,
+            "echo" => println!("{}", args),
+            "type" => match args {
+                "exit" | "echo" | "type" => println!("{} is a shell builtin", args),
+                _ => eprintln!("{}: not found", args),
+            },
+            _ => {
+                eprintln!("{}: command not found", command);
             }
         }
     }
