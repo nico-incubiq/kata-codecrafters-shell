@@ -54,14 +54,14 @@ fn type_command(args: &str) {
 }
 
 fn run_command(cmd: &str, args: Option<&str>) {
-    if let Some(location) = find_in_path(cmd) {
-        let mut command = Command::new(location);
+    if let Some(_) = find_in_path(cmd) {
+        let mut command = Command::new(cmd);
         if let Some(args) = args {
             command.args(args.split_ascii_whitespace());
         }
 
         // Start the program in a thread and wait for it to finish.
-        command.spawn().unwrap().wait().unwrap();
+        command.status().unwrap();
     } else {
         eprintln!("{}: command not found", cmd);
     }
