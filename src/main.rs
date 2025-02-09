@@ -1,6 +1,8 @@
+mod arguments;
 mod builtin;
 mod path;
 
+use crate::arguments::parse_args;
 use crate::builtin::BuiltInCommand;
 use crate::path::run_binary;
 use std::io::Write;
@@ -48,72 +50,12 @@ fn input_prompt() -> Result<String, String> {
 
 fn parse_input(input: &str) -> Result<(String, Vec<String>), String> {
     // Split command from arguments.
-    let (command, args) = input
+    let (command, args_string) = input
         .split_once(' ')
         .map(|(cmd, args)| (cmd.to_owned(), args))
         .unwrap_or((input.to_owned(), ""));
 
-    // Split arguments separated by spaces, apart if they are single-quoted.
-    let mut split_args = Vec::new();
-    let mut current = "".to_owned();
-    let mut is_within_quotes = false;
-    for char in args.chars() {
-        if !is_within_quotes && char.is_whitespace() && !current.is_empty() {
-            split_args.push(current);
-            current = "".to_owned();
-        } else if char == '\'' {
-            is_within_quotes = !is_within_quotes;
-        } else if is_within_quotes || !char.is_whitespace() {
-            current.push(char);
-        }
-    }
+    let args = parse_args(args_string)?;
 
-    if is_within_quotes {
-        return Err("Invalid single-quoting".to_owned());
-    } else if !current.is_empty() {
-        split_args.push(current);
-    }
-
-    Ok((command, split_args))
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::parse_input;
-
-    #[test]
-    fn it_splits_command_from_args() {
-        // Split at spaces.
-        assert_eq!(
-            Ok(("hello".to_owned(), ["world".to_owned()].to_vec())),
-            parse_input("hello world")
-        );
-        assert_eq!(
-            Ok(("hello".to_owned(), ["world".to_owned()].to_vec())),
-            parse_input("hello       world")
-        );
-
-        // Don't split single-quoted strings.
-        assert_eq!(
-            Ok((
-                "hello".to_owned(),
-                ["to the world", "from ", "me"].map(str::to_owned).to_vec()
-            )),
-            parse_input("hello 'to the world'     'from ' me")
-        );
-
-        // Skip single quotes if not separated by spaces.
-        assert_eq!(
-            Ok(("hello".to_owned(), ["world".to_owned()].to_vec())),
-            parse_input("hello w'orl'd")
-        );
-        assert_eq!(
-            Ok(("hello".to_owned(), ["world".to_owned()].to_vec())),
-            parse_input("hello 'worl'd")
-        );
-        assert_eq!(
-            Ok(("hello".to_owned(), ["world oh".to_owned()].to_vec())),
-            parse_input("hello wo'rld 'oh")
-        );
-    }
+    Ok((command, args))
 }
