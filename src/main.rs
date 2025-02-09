@@ -20,8 +20,9 @@ fn main() {
             .map(|(cmd, args)| (cmd, Some(args)))
             .unwrap_or((&input, None));
 
+        // Evaluate the first argument.
         let _ = match BuiltInCommand::try_from(command) {
-            Ok(command) => command.run(args),
+            Ok(built_in) => built_in.run(args),
             _ => run_binary(command, args),
         }
         .map_err(|e| eprintln!("{}", e));
