@@ -1,25 +1,47 @@
+const ESCAPE_CHARACTER: char = '\\';
+const ESCAPABLE_CHARACTERS: [char; 4] = [DOUBLE_QUOTE, '\\', '$', '\n'];
+const SINGLE_QUOTE: char = '\'';
+const DOUBLE_QUOTE: char = '"';
+
 pub(crate) fn parse_args(args_string: &str) -> Result<Vec<String>, String> {
     // Split arguments separated by spaces, apart if they are single-quoted.
     let mut split_args = Vec::new();
     let mut current = "".to_owned();
+
     let mut is_within_quotes = false;
     let mut is_within_double_quotes = false;
+    let mut is_escaping = false;
+
     for char in args_string.chars() {
         if !is_within_quotes && char.is_whitespace() && !current.is_empty() {
             // Break at whitespaces when not within quotes.
             split_args.push(current);
             current = "".to_owned();
-        } else if (!is_within_quotes || is_within_double_quotes) && char == '"' {
+        } else if !is_escaping && (!is_within_quotes || is_within_double_quotes) && char == DOUBLE_QUOTE {
             // Toggle double-quoted and quoted mode mode.
             is_within_double_quotes = !is_within_double_quotes;
             is_within_quotes = !is_within_quotes;
-        } else if !is_within_double_quotes && char == '\'' {
+        } else if !is_within_double_quotes && char == SINGLE_QUOTE {
             // Toggle quoted mode.
             is_within_quotes = !is_within_quotes;
-        } else if is_within_quotes || !char.is_whitespace() {
-            // Capture characters.
-            // Skip whitespaces outside of quotes.
+        } else if !is_escaping && is_within_double_quotes && char == ESCAPE_CHARACTER {
+            // Enable escape mode.
+            is_escaping = true;
+        } else if is_escaping && !ESCAPABLE_CHARACTERS.contains(&char) {
+            // Push the previous character.
+            current.push(ESCAPE_CHARACTER);
+
+            // Push the character itself.
             current.push(char);
+
+            // Disable escape mode.
+            is_escaping = false;
+        } else if is_within_quotes || !char.is_whitespace() {
+            // Capture characters, skipping whitespaces outside of quotes.
+            current.push(char);
+
+            // Disable escape mode regardless.
+            is_escaping = false;
         }
     }
 
@@ -112,10 +134,33 @@ mod tests {
     fn it_handles_escaping_within_double_quotes() {
         // Escape double-quotes.
         assert_eq!(
-            Ok(["hello", "to \"the\" world"].map(str::to_owned).to_vec()),
+            Ok(["hello", r#"to "the" world"#].map(str::to_owned).to_vec()),
             parse_args(r#"hello "to \"the\" world""#)
         );
+
+        // Escape backslash.
+        assert_eq!(
+            Ok([r#"he\\o"#].map(str::to_owned).to_vec()),
+            parse_args(r#""he\\\\o""#)
+        );
+
+        // Escape dollar.
+        assert_eq!(
+            Ok(["hello", "$HOME"].map(str::to_owned).to_vec()),
+            parse_args(r#"hello "\$HOME""#)
+        );
+
+        // Escape newline.
+        assert_eq!(
+            Ok(["hello", "to the\nworld"].map(str::to_owned).to_vec()),
+            parse_args(r#"hello "to the\
+world""#)
+        );
+
+        // Does NOT escape backslash if not followed by one of \, ", $.
+        assert_eq!(
+            Ok(["hello", r#"wor\d"#].map(str::to_owned).to_vec()),
+            parse_args(r#"hello "wor\d""#)
+        );
     }
-
-
 }
