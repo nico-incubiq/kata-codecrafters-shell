@@ -20,7 +20,7 @@ fn main() {
             .map(|(cmd, args)| (cmd, Some(args)))
             .unwrap_or((&input, None));
 
-        // Evaluate the first argument.
+        // Interpret the command name and run it.
         let _ = match BuiltInCommand::try_from(command) {
             Ok(built_in) => built_in.run(args),
             _ => run_binary(command, args),
@@ -84,10 +84,16 @@ impl BuiltInCommand {
     fn run(&self, args: Option<&str>) -> Result<(), String> {
         match self {
             BuiltInCommand::ChangeDirectory => {
-                let working_dir = args.ok_or("Missing working directory argument")?;
+                let arg = args.ok_or("Missing working directory argument")?.trim();
+                let working_directory = if arg == "~" {
+                    &std::env::var("HOME")
+                        .map_err(|e| format!("Invalid HOME environment variable: {:?}", e))?
+                } else {
+                    arg
+                };
 
-                std::env::set_current_dir(working_dir)
-                    .map_err(|_| format!("cd: {}: No such file or directory", working_dir))?;
+                std::env::set_current_dir(working_directory)
+                    .map_err(|_| format!("cd: {}: No such file or directory", working_directory))?;
             }
             BuiltInCommand::Echo => {
                 println!("{}", args.unwrap_or_default());
