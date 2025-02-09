@@ -86,7 +86,7 @@ impl BuiltInCommand {
                 let working_dir = args.ok_or("Missing working directory argument")?;
 
                 std::env::set_current_dir(working_dir)
-                    .map_err(|e| format!("Failed to change working directory: {:?}", e))?;
+                    .map_err(|_| format!("cd: {}: No such file or directory", working_dir))?;
             }
             BuiltInCommand::Echo => {
                 println!("{}", args.unwrap_or_default());
