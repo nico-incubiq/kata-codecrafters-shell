@@ -1,36 +1,27 @@
-use std::fmt::{Display, Formatter};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn main() {
     loop {
-        // Print the prompt and grab the command.
-        let input = prompt();
+        // Print the prompt and grab the input.
+        let input = input_prompt();
 
         // Split the command and arguments.
         let (command, args) = input
-            .trim()
             .split_once(' ')
             .map(|(cmd, args)| (cmd, Some(args)))
-            .unwrap_or((input.trim(), None));
+            .unwrap_or((&input, None));
 
-        match (BuiltInCommand::try_from(command), args) {
-            (Ok(BuiltInCommand::Exit), Some("0")) => break,
-            (Ok(BuiltInCommand::Echo), _) => println!("{}", args.unwrap_or_default()),
-            (Ok(BuiltInCommand::Pwd), None) => println!("{}", std::env::current_dir().unwrap().display()),
-            (Ok(BuiltInCommand::Type), Some(args)) => match BuiltInCommand::try_from(args) {
-                Ok(arg_command) => {
-                    println!("{} is a shell builtin", arg_command)
-                }
-                _ => type_of_binary(args),
-            },
+        let _ = match BuiltInCommand::try_from(command) {
+            Ok(command) => command.run(args),
             _ => run_binary(command, args),
         }
+        .map_err(|e| eprintln!("{}", e));
     }
 }
 
-fn prompt() -> String {
+fn input_prompt() -> String {
     // Print the prompt.
     print!("$ ");
     io::stdout().flush().unwrap();
@@ -39,7 +30,8 @@ fn prompt() -> String {
     let stdin = io::stdin();
     let mut input = String::new();
     stdin.read_line(&mut input).unwrap();
-    input
+
+    input.trim().to_owned()
 }
 
 enum BuiltInCommand {
@@ -52,27 +44,59 @@ enum BuiltInCommand {
 impl TryFrom<&str> for BuiltInCommand {
     type Error = String;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
+    fn try_from(command: &str) -> Result<Self, Self::Error> {
+        match command {
             "echo" => Ok(BuiltInCommand::Echo),
             "exit" => Ok(BuiltInCommand::Exit),
             "pwd" => Ok(BuiltInCommand::Pwd),
             "type" => Ok(BuiltInCommand::Type),
-            _ => Err(format!("Unknown builtin command {}", value)),
+            _ => Err(format!("Unknown builtin command {}", command)),
         }
     }
 }
 
-impl Display for BuiltInCommand {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let val = match self {
+impl BuiltInCommand {
+    fn name(&self) -> String {
+        match self {
             BuiltInCommand::Echo => "echo",
             BuiltInCommand::Exit => "exit",
             BuiltInCommand::Pwd => "pwd",
             BuiltInCommand::Type => "type",
+        }
+        .to_owned()
+    }
+
+    fn run(&self, args: Option<&str>) -> Result<(), String> {
+        match self {
+            BuiltInCommand::Echo => {
+                println!("{}", args.unwrap_or_default());
+            }
+            BuiltInCommand::Exit => {
+                let exit_code = args.ok_or("Missing exit code".to_owned()).and_then(|s| {
+                    s.parse::<i32>()
+                        .map_err(|e| format!("Invalid exit code '{}': {:?}", s, e))
+                })?;
+
+                std::process::exit(exit_code);
+            }
+            BuiltInCommand::Pwd => {
+                println!("{}", std::env::current_dir().unwrap().display());
+            }
+            BuiltInCommand::Type => {
+                if let Some(args) = args {
+                    match BuiltInCommand::try_from(args) {
+                        Ok(arg_command) => {
+                            println!("{} is a shell builtin", arg_command.name());
+                        }
+                        _ => type_of_binary(args)?,
+                    }
+                } else {
+                    return Err("`type` expects a command name as argument".to_owned());
+                }
+            }
         };
 
-        write!(f, "{}", val)
+        Ok(())
     }
 }
 
@@ -87,15 +111,17 @@ fn find_in_path(name: &str) -> Option<PathBuf> {
         .find_map(|dir| Some(Path::new(dir).join(name)).filter(|location| location.exists()))
 }
 
-fn type_of_binary(args: &str) {
+fn type_of_binary(args: &str) -> Result<(), String> {
     if let Some(location) = find_in_path(args) {
         println!("{} is {}", args, location.display());
+
+        Ok(())
     } else {
-        eprintln!("{}: not found", args);
+        Err(format!("{}: not found", args))
     }
 }
 
-fn run_binary(cmd: &str, args: Option<&str>) {
+fn run_binary(cmd: &str, args: Option<&str>) -> Result<(), String> {
     if let Some(_) = find_in_path(cmd) {
         let mut command = Command::new(cmd);
         if let Some(args) = args {
@@ -103,8 +129,8 @@ fn run_binary(cmd: &str, args: Option<&str>) {
         }
 
         // Start the program in a thread and wait for it to finish.
-        command.status().unwrap();
+        command.status().map(|_| {}).map_err(|e| format!("{:?}", e))
     } else {
-        eprintln!("{}: command not found", cmd);
+        Err(format!("{}: command not found", cmd))
     }
 }
