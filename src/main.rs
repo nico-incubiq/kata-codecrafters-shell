@@ -1,46 +1,43 @@
 mod builtin;
+mod path;
 
 use crate::builtin::BuiltInCommand;
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use crate::path::run_binary;
+use std::io::Write;
 
 fn main() {
     loop {
-        // Print the prompt and grab the input.
-        let input = match input_prompt() {
-            Ok(input) => input,
-            Err(e) => {
-                eprintln!("{}", e);
-
-                continue;
-            }
-        };
-
-        // Split the command and arguments.
-        let (command, args) = input
-            .split_once(' ')
-            .map(|(cmd, args)| (cmd, Some(args)))
-            .unwrap_or((&input, None));
-
-        // Interpret the command name and run it.
-        let _ = match BuiltInCommand::try_from(command) {
-            Ok(built_in) => built_in.run(args),
-            _ => run_binary(command, args),
+        if let Err(error) = repl() {
+            eprintln!("{}", error);
         }
-        .map_err(|e| eprintln!("{}", e));
     }
+}
+
+fn repl() -> Result<(), String> {
+    // Print the prompt and grab the input.
+    let input = input_prompt()?;
+
+    // Split the command and arguments.
+    let (command, args) = parse_input(&input)?;
+
+    // Interpret the command name and run it.
+    match BuiltInCommand::try_from(command.as_ref()) {
+        Ok(built_in) => built_in.run(&args),
+        _ => run_binary(&command, &args),
+    }?;
+
+    Ok(())
 }
 
 fn input_prompt() -> Result<String, String> {
     // Print the prompt.
     print!("$ ");
-    io::stdout()
+    std::io::stdout()
         .flush()
         .map_err(|e| format!("Failed to print the prompt: {:?}", e))?;
 
     // Wait for user input.
-    let stdin = io::stdin();
+    let stdin = std::io::stdin();
     let mut input = String::new();
     stdin
         .read_line(&mut input)
@@ -49,40 +46,11 @@ fn input_prompt() -> Result<String, String> {
     Ok(input.trim().to_owned())
 }
 
-fn find_binary_in_path(name: &str) -> Result<Option<PathBuf>, String> {
-    // Load the PATH env variable.
-    let path =
-        std::env::var("PATH").map_err(|e| format!("Invalid PATH environment variable: {:?}", e))?;
-    let directories = path.split(':');
+fn parse_input(input: &str) -> Result<(String, Vec<String>), String> {
+    let (command, args) = input
+        .split_once(' ')
+        .map(|(cmd, args)| (cmd.to_owned(), [args.to_owned()].to_vec()))
+        .unwrap_or((input.to_owned(), [].to_vec()));
 
-    // Check whether the file exists in any of the directories.
-    let location = directories
-        .into_iter()
-        .find_map(|dir| Some(Path::new(dir).join(name)).filter(|location| location.exists()));
-
-    Ok(location)
-}
-
-fn print_type_of_binary(args: &str) -> Result<(), String> {
-    if let Some(location) = find_binary_in_path(args)? {
-        println!("{} is {}", args, location.display());
-
-        Ok(())
-    } else {
-        Err(format!("{}: not found", args))
-    }
-}
-
-fn run_binary(cmd: &str, args: Option<&str>) -> Result<(), String> {
-    if find_binary_in_path(cmd)?.is_some() {
-        let mut command = Command::new(cmd);
-        if let Some(args) = args {
-            command.args(args.split_ascii_whitespace());
-        }
-
-        // Start the program in a thread and wait for it to finish.
-        command.status().map(|_| {}).map_err(|e| format!("{:?}", e))
-    } else {
-        Err(format!("{}: command not found", cmd))
-    }
+    Ok((command, args))
 }

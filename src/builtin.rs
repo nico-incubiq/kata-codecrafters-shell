@@ -1,4 +1,4 @@
-use crate::print_type_of_binary;
+use crate::path::find_binary_in_path;
 
 pub(crate) enum BuiltInCommand {
     ChangeDirectory,
@@ -35,30 +35,30 @@ impl BuiltInCommand {
         .to_owned()
     }
 
-    pub(crate) fn run(&self, args: Option<&str>) -> Result<(), String> {
+    pub(crate) fn run(&self, args: &[String]) -> Result<(), String> {
         match self {
             BuiltInCommand::ChangeDirectory => {
-                let arg = args.ok_or("Missing working directory argument")?.trim();
+                let arg = get_single_argument(args)?;
+
                 let working_directory = if arg == "~" {
-                    &std::env::var("HOME")
+                    std::env::var("HOME")
                         .map_err(|e| format!("Invalid HOME environment variable: {:?}", e))?
                 } else {
                     arg
                 };
 
-                std::env::set_current_dir(working_directory)
+                std::env::set_current_dir(&working_directory)
                     .map_err(|_| format!("cd: {}: No such file or directory", working_directory))?;
             }
             BuiltInCommand::Echo => {
-                println!("{}", args.unwrap_or_default());
+                println!("{}", args.join(" "));
             }
             BuiltInCommand::Exit => {
-                let exit_code = args
-                    .ok_or("Missing exit code argument".to_owned())
-                    .and_then(|s| {
-                        s.parse::<i32>()
-                            .map_err(|e| format!("Invalid exit code '{}': {:?}", s, e))
-                    })?;
+                let arg = get_single_argument(args)?;
+
+                let exit_code = arg
+                    .parse::<i32>()
+                    .map_err(|e| format!("Invalid exit code '{}': {:?}", arg, e))?;
 
                 std::process::exit(exit_code);
             }
@@ -70,19 +70,28 @@ impl BuiltInCommand {
                 println!("{}", cwd.display());
             }
             BuiltInCommand::Type => {
-                if let Some(args) = args {
-                    match BuiltInCommand::try_from(args) {
-                        Ok(arg_command) => {
-                            println!("{} is a shell builtin", arg_command.name());
-                        }
-                        _ => print_type_of_binary(args)?,
-                    }
+                let arg = get_single_argument(args)?;
+
+                if let Ok(sub_command) = BuiltInCommand::try_from(arg.as_ref()) {
+                    println!("{} is a shell builtin", sub_command.name());
+                } else if let Some(location) = find_binary_in_path(&arg)? {
+                    println!("{} is {}", arg, location.display());
                 } else {
-                    return Err("`type` expects a command name as argument".to_owned());
+                    return Err(format!("{}: not found", arg));
                 }
             }
         };
 
         Ok(())
+    }
+}
+
+fn get_single_argument(args: &[String]) -> Result<String, String> {
+    if args.is_empty() {
+        Err("Not enough arguments, expected exactly 1".to_owned())
+    } else if 1 < args.len() {
+        Err("Too many arguments".to_owned())
+    } else {
+        Ok(args[0].trim().to_owned())
     }
 }
