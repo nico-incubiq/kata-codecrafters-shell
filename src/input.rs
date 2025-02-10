@@ -4,7 +4,20 @@ const SINGLE_QUOTE: char = '\'';
 const DOUBLE_QUOTE: char = '"';
 const NEWLINE: char = '\n';
 
-pub(crate) fn parse_args(args_string: &str) -> Result<Vec<String>, String> {
+/// Parse the input string into a command and its arguments.
+pub(crate) fn parse_input(input: &str) -> Result<(String, Vec<String>), String> {
+    let mut values = split_input(input)?;
+
+    if values.is_empty() {
+        Err("Empty input".to_owned())
+    } else {
+        Ok((values.remove(0), values))
+    }
+}
+
+/// Split the provided string, taking into account single-quoting, double-quoting, and escaping
+/// rules.
+fn split_input(input: &str) -> Result<Vec<String>, String> {
     // Split arguments separated by spaces, apart if they are single-quoted.
     let mut split_args = Vec::new();
     let mut current_arg = String::new();
@@ -13,7 +26,7 @@ pub(crate) fn parse_args(args_string: &str) -> Result<Vec<String>, String> {
     let mut is_within_double_quotes = false;
     let mut is_escaping = false;
 
-    for char in args_string.chars() {
+    for char in input.chars() {
         if is_arg_boundary(char, &current_arg, is_within_quotes, is_escaping) {
             // Split the argument at this character, skipping the character itself.
             split_args.push(current_arg);
@@ -98,18 +111,18 @@ fn is_arg_boundary(
 
 #[cfg(test)]
 mod tests {
-    use crate::arguments::parse_args;
+    use crate::input::split_input;
 
     #[test]
     fn it_splits_command_from_args() {
         // Split at spaces.
         assert_eq!(
             Ok(["hello", "world"].map(str::to_owned).to_vec()),
-            parse_args("hello world")
+            split_input("hello world")
         );
         assert_eq!(
             Ok(["hello", "world"].map(str::to_owned).to_vec()),
-            parse_args("hello       world")
+            split_input("hello       world")
         );
     }
 
@@ -120,27 +133,27 @@ mod tests {
             Ok(["hello", "to the world", "from ", "me"]
                 .map(str::to_owned)
                 .to_vec()),
-            parse_args("hello 'to the world'     'from ' me")
+            split_input("hello 'to the world'     'from ' me")
         );
 
         // Don't split args at single quotes if not surrounded by spaces.
         assert_eq!(
             Ok(["hello", "world"].map(str::to_owned).to_vec()),
-            parse_args("hello w'orl'd")
+            split_input("hello w'orl'd")
         );
         assert_eq!(
             Ok(["hello", "world"].map(str::to_owned).to_vec()),
-            parse_args("hello 'worl'd")
+            split_input("hello 'worl'd")
         );
         assert_eq!(
             Ok(["hello", "world oh"].map(str::to_owned).to_vec()),
-            parse_args("hello wo'rld 'oh")
+            split_input("hello wo'rld 'oh")
         );
 
         // Error on dangling single-quoted string.
         assert_eq!(
             Err("Invalid single-quoting".to_owned()),
-            parse_args("hello 'world")
+            split_input("hello 'world")
         );
     }
 
@@ -151,21 +164,21 @@ mod tests {
             Ok(["hello", "to the world", "from ", "me"]
                 .map(str::to_owned)
                 .to_vec()),
-            parse_args(r#"hello "to the world"     "from " me"#)
+            split_input(r#"hello "to the world"     "from " me"#)
         );
 
         // Don't split args at double quotes if not surrounded by spaces.
         assert_eq!(
             Ok(["hello", "world"].map(str::to_owned).to_vec()),
-            parse_args(r#"hello w"orl"d"#)
+            split_input(r#"hello w"orl"d"#)
         );
         assert_eq!(
             Ok(["hello", "world"].map(str::to_owned).to_vec()),
-            parse_args(r#"hello "worl"d"#)
+            split_input(r#"hello "worl"d"#)
         );
         assert_eq!(
             Ok(["hello", "world oh"].map(str::to_owned).to_vec()),
-            parse_args(r#"hello wo"rld "oh"#)
+            split_input(r#"hello wo"rld "oh"#)
         );
     }
 
@@ -174,17 +187,17 @@ mod tests {
         // Preserve double-quotes.
         assert_eq!(
             Ok(["hello", r#"to "the" world"#].map(str::to_owned).to_vec()),
-            parse_args(r#"hello 'to "the" world'"#)
+            split_input(r#"hello 'to "the" world'"#)
         );
 
         // Preserve backslashes.
         assert_eq!(
             Ok([r#"hello\\\\world"#].map(str::to_owned).to_vec()),
-            parse_args(r#"'hello\\\\world'"#)
+            split_input(r#"'hello\\\\world'"#)
         );
         assert_eq!(
             Ok(["hello", r#"to \"the\" world"#].map(str::to_owned).to_vec()),
-            parse_args(r#"hello 'to \"the\" world'"#)
+            split_input(r#"hello 'to \"the\" world'"#)
         );
     }
 
@@ -193,11 +206,11 @@ mod tests {
         // Preserve single-quotes.
         assert_eq!(
             Ok(["hello", "to 'the' world"].map(str::to_owned).to_vec()),
-            parse_args(r#"hello "to 'the' world""#)
+            split_input(r#"hello "to 'the' world""#)
         );
         assert_eq!(
             Ok(["hello", "wo'r'ld"].map(str::to_owned).to_vec()),
-            parse_args(r#"hello w"o'r'l"d"#)
+            split_input(r#"hello w"o'r'l"d"#)
         );
     }
 
@@ -206,25 +219,25 @@ mod tests {
         // Escape double-quotes.
         assert_eq!(
             Ok(["hello", r#"to "the" world"#].map(str::to_owned).to_vec()),
-            parse_args(r#"hello "to \"the\" world""#)
+            split_input(r#"hello "to \"the\" world""#)
         );
 
         // Escape backslash.
         assert_eq!(
             Ok([r#"he\\o"#].map(str::to_owned).to_vec()),
-            parse_args(r#""he\\\\o""#)
+            split_input(r#""he\\\\o""#)
         );
 
         // Escape dollar.
         assert_eq!(
             Ok(["hello", "$HOME"].map(str::to_owned).to_vec()),
-            parse_args(r#"hello "\$HOME""#)
+            split_input(r#"hello "\$HOME""#)
         );
 
         // Escape newline, treating it as a continuation.
         assert_eq!(
             Ok(["hello", "to the world"].map(str::to_owned).to_vec()),
-            parse_args(
+            split_input(
                 r#"hello "to the \
 world""#
             )
@@ -233,7 +246,7 @@ world""#
         // Does NOT escape backslash if not followed by one of \, ", $.
         assert_eq!(
             Ok(["hello", r#"wor\d"#].map(str::to_owned).to_vec()),
-            parse_args(r#"hello "wor\d""#)
+            split_input(r#"hello "wor\d""#)
         );
     }
 
@@ -242,25 +255,25 @@ world""#
         // Escape whitespace.
         assert_eq!(
             Ok(["hello   world"].map(str::to_owned).to_vec()),
-            parse_args(r#"hello\ \ \ world"#)
+            split_input(r#"hello\ \ \ world"#)
         );
 
         // Escape single-quoting.
         assert_eq!(
             Ok(["hello", "'world'"].map(str::to_owned).to_vec()),
-            parse_args(r#"hello \'world\'"#)
+            split_input(r#"hello \'world\'"#)
         );
 
         // Escape double-quoting.
         assert_eq!(
             Ok(["hello", r#""world""#].map(str::to_owned).to_vec()),
-            parse_args(r#"hello \"world\""#)
+            split_input(r#"hello \"world\""#)
         );
 
         // Escape newline, treating it as a continuation.
         assert_eq!(
             Ok(["hello", "to", "the", "world"].map(str::to_owned).to_vec()),
-            parse_args(
+            split_input(
                 r#"hello to \
 the world"#
             )
@@ -269,13 +282,13 @@ the world"#
         // Escape backslash.
         assert_eq!(
             Ok([r#"he\\o"#, r#"wor\d"#].map(str::to_owned).to_vec()),
-            parse_args(r#"he\\\\o wor\\d"#)
+            split_input(r#"he\\\\o wor\\d"#)
         );
 
         // Does NOT print the backslash when not escaping itself.
         assert_eq!(
             Ok(["heo", "word"].map(str::to_owned).to_vec()),
-            parse_args(r#"he\o wor\d"#)
+            split_input(r#"he\o wor\d"#)
         );
     }
 }

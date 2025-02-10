@@ -1,9 +1,9 @@
-mod arguments;
 mod builtin;
+mod input;
 mod path;
 
-use crate::arguments::parse_args;
 use crate::builtin::BuiltInCommand;
+use crate::input::parse_input;
 use crate::path::run_binary;
 use std::io::Write;
 
@@ -46,16 +46,4 @@ fn input_prompt() -> Result<String, String> {
         .map_err(|e| format!("Failed to read input: {:?}", e))?;
 
     Ok(input.trim().to_owned())
-}
-
-fn parse_input(input: &str) -> Result<(String, Vec<String>), String> {
-    // Split command from arguments.
-    let (command, args_string) = input
-        .split_once(' ')
-        .map(|(cmd, args)| (cmd.to_owned(), args))
-        .unwrap_or((input.to_owned(), ""));
-
-    let args = parse_args(args_string)?;
-
-    Ok((command, args))
 }
