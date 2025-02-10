@@ -38,7 +38,7 @@ pub(crate) fn parse_args(args_string: &str) -> Result<Vec<String>, String> {
         } else if is_single_quoting_toggle(char, is_within_double_quotes) {
             // Toggle quoted mode.
             is_within_quotes = !is_within_quotes;
-        } else if is_escaping_toggle(char) {
+        } else if is_escaping_toggle(char, is_within_double_quotes, is_within_quotes) {
             // Enable escape mode.
             is_escaping = true;
         } else if should_capture_char(char, is_within_quotes) {
@@ -63,8 +63,13 @@ fn should_capture_char(current_char: char, is_within_quotes: bool) -> bool {
     is_within_quotes || !current_char.is_whitespace()
 }
 
-fn is_escaping_toggle(current_char: char) -> bool {
-    current_char == ESCAPE_CHARACTER
+fn is_escaping_toggle(
+    current_char: char,
+    is_within_double_quotes: bool,
+    is_within_quotes: bool,
+) -> bool {
+    // Only interpret backslashes if they are not within a single-quoted string.
+    (!is_within_quotes || is_within_double_quotes) && current_char == ESCAPE_CHARACTER
 }
 
 fn is_single_quoting_toggle(current_char: char, is_within_double_quotes: bool) -> bool {
@@ -161,6 +166,25 @@ mod tests {
         assert_eq!(
             Ok(["hello", "world oh"].map(str::to_owned).to_vec()),
             parse_args(r#"hello wo"rld "oh"#)
+        );
+    }
+
+    #[test]
+    fn it_preserves_the_literal_value_of_characters_within_single_quotes() {
+        // Preserve double-quotes.
+        assert_eq!(
+            Ok(["hello", r#"to "the" world"#].map(str::to_owned).to_vec()),
+            parse_args(r#"hello 'to "the" world'"#)
+        );
+
+        // Preserve backslashes.
+        assert_eq!(
+            Ok([r#"hello\\\\world"#].map(str::to_owned).to_vec()),
+            parse_args(r#"'hello\\\\world'"#)
+        );
+        assert_eq!(
+            Ok(["hello", r#"to \"the\" world"#].map(str::to_owned).to_vec()),
+            parse_args(r#"hello 'to \"the\" world'"#)
         );
     }
 
