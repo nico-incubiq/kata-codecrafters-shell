@@ -1,10 +1,10 @@
 mod builtin;
-mod input;
 mod path;
+mod quoting;
 
 use crate::builtin::BuiltInCommand;
-use crate::input::parse_input;
 use crate::path::run_binary;
+use crate::quoting::split_quoted_string;
 use std::io::Write;
 
 fn main() {
@@ -46,4 +46,15 @@ fn input_prompt() -> Result<String, String> {
         .map_err(|e| format!("Failed to read input: {:?}", e))?;
 
     Ok(input.trim().to_owned())
+}
+
+/// Parse the input string into a command and its arguments.
+fn parse_input(input: &str) -> Result<(String, Vec<String>), String> {
+    let mut values = split_quoted_string(input)?;
+
+    if values.is_empty() {
+        Err("Empty input".to_owned())
+    } else {
+        Ok((values.remove(0), values))
+    }
 }
