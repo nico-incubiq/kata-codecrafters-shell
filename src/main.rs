@@ -1,8 +1,10 @@
 mod builtin;
+mod io_redirection;
 mod path;
 mod quoting;
 
 use crate::builtin::BuiltInCommand;
+use crate::io_redirection::get_io_redirections;
 use crate::path::run_binary;
 use crate::quoting::split_quoted_string;
 use std::io::Write;
@@ -22,10 +24,13 @@ fn repl() -> Result<(), String> {
     // Split the command and arguments.
     let (command, args) = parse_input(&input)?;
 
+    // Get the standard output / error descriptors to execute the command.
+    let mut io_redirections = get_io_redirections()?;
+
     // Interpret the command name and run it.
     match BuiltInCommand::try_from(command.as_ref()) {
-        Ok(built_in) => built_in.run(&args),
-        _ => run_binary(&command, &args),
+        Ok(built_in) => built_in.run(&args, &mut io_redirections),
+        _ => run_binary(&command, &args, &mut io_redirections),
     }?;
 
     Ok(())

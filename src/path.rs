@@ -1,12 +1,21 @@
+use crate::io_redirection::IoRedirections;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-pub(crate) fn run_binary(cmd: &str, args: &[String]) -> Result<(), String> {
+pub(crate) fn run_binary(
+    cmd: &str,
+    args: &[String],
+    io_redirections: &mut IoRedirections,
+) -> Result<(), String> {
     if find_binary_in_path(cmd)?.is_some() {
         let mut command = Command::new(cmd);
-        if !args.is_empty() {
-            command.args(args);
-        }
+
+        // Pass command args.
+        command.args(args);
+
+        // Redirect standard output and error.
+        command.stdout(io_redirections.stdout_as_stdio()?);
+        command.stderr(io_redirections.stderr_as_stdio()?);
 
         // Start the program in a thread and wait for it to finish.
         command.status().map(|_| {}).map_err(|e| format!("{:?}", e))

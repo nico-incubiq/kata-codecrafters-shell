@@ -1,3 +1,4 @@
+use crate::io_redirection::IoRedirections;
 use crate::path::find_binary_in_path;
 
 pub(crate) enum BuiltInCommand {
@@ -35,7 +36,16 @@ impl BuiltInCommand {
         .to_owned()
     }
 
-    pub(crate) fn run(&self, args: &[String]) -> Result<(), String> {
+    /// Runs the built-in command.
+    ///
+    /// # Note
+    /// The run method doesn't accept a stderr argument as it doesn't write to the standard error
+    /// under regular circumstances. It any error is encountered, they are returned as error types.
+    pub(crate) fn run(
+        &self,
+        args: &[String],
+        io_redirections: &mut IoRedirections,
+    ) -> Result<(), String> {
         match self {
             BuiltInCommand::ChangeDirectory => {
                 let arg = get_single_argument(args)?;
@@ -51,7 +61,7 @@ impl BuiltInCommand {
                     .map_err(|_| format!("cd: {}: No such file or directory", working_directory))?;
             }
             BuiltInCommand::Echo => {
-                println!("{}", args.join(" "));
+                io_redirections.writeln(format_args!("{}", args.join(" ")))?;
             }
             BuiltInCommand::Exit => {
                 let arg = get_single_argument(args)?;
@@ -67,15 +77,16 @@ impl BuiltInCommand {
                     format!("Failed to determine the current working directory: {:?}", e)
                 })?;
 
-                println!("{}", cwd.display());
+                io_redirections.writeln(format_args!("{}", &cwd.display()))?;
             }
             BuiltInCommand::Type => {
                 let arg = get_single_argument(args)?;
 
                 if let Ok(sub_command) = BuiltInCommand::try_from(arg.as_ref()) {
-                    println!("{} is a shell builtin", sub_command.name());
+                    io_redirections
+                        .writeln(format_args!("{} is a shell builtin", sub_command.name()))?;
                 } else if let Some(location) = find_binary_in_path(&arg)? {
-                    println!("{} is {}", arg, location.display());
+                    io_redirections.writeln(format_args!("{} is {}", arg, location.display()))?;
                 } else {
                     return Err(format!("{}: not found", arg));
                 }
