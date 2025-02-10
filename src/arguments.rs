@@ -6,17 +6,17 @@ const DOUBLE_QUOTE: char = '"';
 pub(crate) fn parse_args(args_string: &str) -> Result<Vec<String>, String> {
     // Split arguments separated by spaces, apart if they are single-quoted.
     let mut split_args = Vec::new();
-    let mut current = "".to_owned();
+    let mut current = String::new();
 
     let mut is_within_quotes = false;
     let mut is_within_double_quotes = false;
     let mut is_escaping = false;
 
     for char in args_string.chars() {
-        if !is_within_quotes && char.is_whitespace() && !current.is_empty() {
-            // Break at whitespaces when not within quotes.
+        if is_arg_boundary(char, &current, is_within_quotes) {
+            // Split the argument at this character, skipping the character itself.
             split_args.push(current);
-            current = "".to_owned();
+            current = String::new();
         } else if is_escaping {
             if !ESCAPABLE_CHARACTERS.contains(&char) {
                 // Push the escape character.
@@ -28,29 +28,56 @@ pub(crate) fn parse_args(args_string: &str) -> Result<Vec<String>, String> {
 
             // Disable escape mode.
             is_escaping = false;
-        } else if (!is_within_quotes || is_within_double_quotes) && char == DOUBLE_QUOTE {
+        } else if is_double_quoting_toggle(char, is_within_double_quotes, is_within_quotes) {
             // Toggle double-quoted and quoted mode mode.
             is_within_double_quotes = !is_within_double_quotes;
             is_within_quotes = !is_within_quotes;
-        } else if !is_within_double_quotes && char == SINGLE_QUOTE {
+        } else if is_single_quoting_toggle(char, is_within_double_quotes) {
             // Toggle quoted mode.
             is_within_quotes = !is_within_quotes;
-        } else if is_within_double_quotes && char == ESCAPE_CHARACTER {
+        } else if is_escaping_toggle(char, is_within_double_quotes) {
             // Enable escape mode.
             is_escaping = true;
-        } else if is_within_quotes || !char.is_whitespace() {
-            // Capture characters, skipping whitespaces outside of quotes.
+        } else if should_capture_char(char, is_within_quotes) {
+            // Capture characters.
             current.push(char);
         }
     }
 
-    if is_within_quotes {
-        return Err("Invalid single-quoting".to_owned());
-    } else if !current.is_empty() {
+    if !current.is_empty() {
         split_args.push(current);
     }
 
+    if is_within_quotes {
+        return Err("Invalid single-quoting".to_owned());
+    }
+
     Ok(split_args)
+}
+
+fn should_capture_char(current_char: char, is_within_quotes: bool) -> bool {
+    // Skip whitespaces outside quoted strings.
+    is_within_quotes || !current_char.is_whitespace()
+}
+
+fn is_escaping_toggle(current_char: char, is_within_double_quotes: bool) -> bool {
+    // Only interpret backslashes inside a double-quoted string.
+    is_within_double_quotes && current_char == ESCAPE_CHARACTER
+}
+
+fn is_single_quoting_toggle(current_char: char, is_within_double_quotes: bool) -> bool {
+    // Only interpret single-quotes if they are not within a double-quoted string.
+    !is_within_double_quotes && current_char == SINGLE_QUOTE
+}
+
+fn is_double_quoting_toggle(current_char: char, is_within_double_quotes: bool, is_within_quotes: bool) -> bool {
+    // Only interpret double-quotes if they are not within a single-quoted string.
+    (!is_within_quotes || is_within_double_quotes) && current_char == DOUBLE_QUOTE
+}
+
+fn is_arg_boundary(current_char: char, current_arg: &str, is_within_quotes: bool) -> bool {
+    // Break at whitespaces when not within quotes.
+    !is_within_quotes && current_char.is_whitespace() && !current_arg.is_empty()
 }
 
 #[cfg(test)]
@@ -80,7 +107,7 @@ mod tests {
             parse_args("hello 'to the world'     'from ' me")
         );
 
-        // Skip single quotes if not separated by spaces.
+        // Don't split args at single quotes if not surrounded by spaces.
         assert_eq!(
             Ok(["hello", "world"].map(str::to_owned).to_vec()),
             parse_args("hello w'orl'd")
@@ -92,6 +119,12 @@ mod tests {
         assert_eq!(
             Ok(["hello", "world oh"].map(str::to_owned).to_vec()),
             parse_args("hello wo'rld 'oh")
+        );
+
+        // Error on dangling single-quoted string.
+        assert_eq!(
+            Err("Invalid single-quoting".to_owned()),
+            parse_args("hello 'world")
         );
     }
 
@@ -105,7 +138,7 @@ mod tests {
             parse_args(r#"hello "to the world"     "from " me"#)
         );
 
-        // Skip double quotes if not separated by spaces.
+        // Don't split args at double quotes if not surrounded by spaces.
         assert_eq!(
             Ok(["hello", "world"].map(str::to_owned).to_vec()),
             parse_args(r#"hello w"orl"d"#)
@@ -126,6 +159,10 @@ mod tests {
         assert_eq!(
             Ok(["hello", "to 'the' world"].map(str::to_owned).to_vec()),
             parse_args(r#"hello "to 'the' world""#)
+        );
+        assert_eq!(
+            Ok(["hello", "wo'r'ld"].map(str::to_owned).to_vec()),
+            parse_args(r#"hello w"o'r'l"d"#)
         );
     }
 
@@ -152,8 +189,10 @@ mod tests {
         // Escape newline.
         assert_eq!(
             Ok(["hello", "to the\nworld"].map(str::to_owned).to_vec()),
-            parse_args(r#"hello "to the\
-world""#)
+            parse_args(
+                r#"hello "to the\
+world""#
+            )
         );
 
         // Does NOT escape backslash if not followed by one of \, ", $.
