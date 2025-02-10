@@ -17,31 +17,30 @@ pub(crate) fn parse_args(args_string: &str) -> Result<Vec<String>, String> {
             // Break at whitespaces when not within quotes.
             split_args.push(current);
             current = "".to_owned();
-        } else if !is_escaping && (!is_within_quotes || is_within_double_quotes) && char == DOUBLE_QUOTE {
+        } else if is_escaping {
+            if !ESCAPABLE_CHARACTERS.contains(&char) {
+                // Push the escape character.
+                current.push(ESCAPE_CHARACTER);
+            }
+
+            // Push the current character.
+            current.push(char);
+
+            // Disable escape mode.
+            is_escaping = false;
+        } else if (!is_within_quotes || is_within_double_quotes) && char == DOUBLE_QUOTE {
             // Toggle double-quoted and quoted mode mode.
             is_within_double_quotes = !is_within_double_quotes;
             is_within_quotes = !is_within_quotes;
         } else if !is_within_double_quotes && char == SINGLE_QUOTE {
             // Toggle quoted mode.
             is_within_quotes = !is_within_quotes;
-        } else if !is_escaping && is_within_double_quotes && char == ESCAPE_CHARACTER {
+        } else if is_within_double_quotes && char == ESCAPE_CHARACTER {
             // Enable escape mode.
             is_escaping = true;
-        } else if is_escaping && !ESCAPABLE_CHARACTERS.contains(&char) {
-            // Push the previous character.
-            current.push(ESCAPE_CHARACTER);
-
-            // Push the character itself.
-            current.push(char);
-
-            // Disable escape mode.
-            is_escaping = false;
         } else if is_within_quotes || !char.is_whitespace() {
             // Capture characters, skipping whitespaces outside of quotes.
             current.push(char);
-
-            // Disable escape mode regardless.
-            is_escaping = false;
         }
     }
 
