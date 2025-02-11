@@ -95,6 +95,11 @@ impl IoRedirections {
         self.stdout.writeln(args)
     }
 
+    /// Writes a new line to the standard error.
+    pub(crate) fn ewriteln(&mut self, args: std::fmt::Arguments) -> Result<(), IoRedirectionError> {
+        self.stderr.writeln(args)
+    }
+
     pub(crate) fn stdout_as_stdio(&mut self) -> Result<Stdio, IoRedirectionError> {
         (&mut self.stdout).try_into()
     }

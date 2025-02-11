@@ -54,12 +54,15 @@ fn repl() -> Result<(), ShellError> {
     let mut io_redirections = handle_io_redirections(&mut args)?;
 
     // Interpret the command name and run it.
-    match BuiltInCommand::try_from(command.as_ref()) {
+    if let Err(e) = match BuiltInCommand::try_from(command.as_ref()) {
         Ok(built_in) => built_in
             .run(&args, &mut io_redirections)
-            .map_err(|e| ShellError::BuiltIn(built_in.name(), e))?,
-        _ => run_binary(&command, &args, &mut io_redirections)?,
-    };
+            .map_err(|e| ShellError::BuiltIn(built_in.name(), e)),
+        _ => run_binary(&command, &args, &mut io_redirections).map_err(ShellError::Path),
+    } {
+        // Write errors to the standard error.
+        io_redirections.ewriteln(format_args!("{}", e))?;
+    }
 
     Ok(())
 }
