@@ -15,7 +15,7 @@ pub(crate) enum PathError {
     #[error("Failed to read environment variable: {0}")]
     GetEnvFailed(#[from] VarError),
 
-    #[error(transparent)]
+    #[error("Failed setting up standard I/O redirection: {0}")]
     IoRedirectionFailed(#[from] IoRedirectionError),
 }
 

@@ -10,7 +10,7 @@ pub(crate) enum BuiltInCommandError {
     BuiltInCommandNotFound(String),
 
     #[error("{0}: not found")]
-    OsCommandNotFound(String),
+    PathCommandNotFound(String),
 
     #[error("Not enough arguments, found {found}, expected at least {min}")]
     NotEnoughArguments { found: usize, min: usize },
@@ -24,13 +24,13 @@ pub(crate) enum BuiltInCommandError {
     #[error(transparent)]
     WriteLineFailed(#[from] IoRedirectionError),
 
-    #[error(transparent)]
+    #[error("Failed to search executable in PATH: {0}")]
     FindInPathFailed(#[from] PathError),
 
     #[error("Failed to read environment variable: {0}")]
     GetEnvFailed(#[from] VarError),
 
-    #[error("cd: {0}: {1}")]
+    #[error("{0}: {1}")]
     ChangeDirectoryFailed(String, #[source] std::io::Error),
 
     #[error("Failed to determine the current working directory: {0}")]
@@ -111,6 +111,13 @@ impl BuiltInCommand {
                 std::process::exit(exit_code);
             }
             BuiltInCommand::PrintWorkingDirectory => {
+                if !args.is_empty() {
+                    return Err(BuiltInCommandError::TooManyArguments {
+                        max: 0,
+                        found: args.len(),
+                    });
+                };
+
                 let cwd = std::env::current_dir()
                     .map_err(BuiltInCommandError::GetCurrentDirectoryFailed)?;
 
@@ -125,7 +132,7 @@ impl BuiltInCommand {
                 } else if let Some(location) = find_in_path(&arg)? {
                     io_redirections.writeln(format_args!("{} is {}", arg, location.display()))?;
                 } else {
-                    return Err(BuiltInCommandError::OsCommandNotFound(arg));
+                    return Err(BuiltInCommandError::PathCommandNotFound(arg));
                 }
             }
         };

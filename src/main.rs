@@ -18,8 +18,8 @@ enum ShellError {
     #[error("Failed to read the input: {0:?}")]
     ReadInputFailed(std::io::Error),
 
-    #[error(transparent)]
-    BuiltIn(#[from] BuiltInCommandError),
+    #[error("{0}: {1}")]
+    BuiltIn(String, BuiltInCommandError),
 
     #[error(transparent)]
     IoRedirection(#[from] IoRedirectionError),
@@ -55,7 +55,9 @@ fn repl() -> Result<(), ShellError> {
 
     // Interpret the command name and run it.
     match BuiltInCommand::try_from(command.as_ref()) {
-        Ok(built_in) => built_in.run(&args, &mut io_redirections)?,
+        Ok(built_in) => built_in
+            .run(&args, &mut io_redirections)
+            .map_err(|e| ShellError::BuiltIn(built_in.name(), e))?,
         _ => run_binary(&command, &args, &mut io_redirections)?,
     };
 
