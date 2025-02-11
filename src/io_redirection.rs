@@ -2,17 +2,22 @@ use std::fs::{File, OpenOptions};
 use std::io::{stderr, stdout, Write};
 use std::process::Stdio;
 
+/// Looks for stdout and/or stderr redirections in the args.
+/// Also removes the redirections from the args list.
+///
+/// # Note
+/// Redirections are expected to be surrounded with spaces.
 pub(crate) fn handle_io_redirections(args: &mut Vec<String>) -> Result<IoRedirections, String> {
     // Look for standard output redirect.
-    let stdout = if let Some(file_name) = extract_io_redirection(args, 1)? {
-        Descriptor::File(open_redirect_file(&file_name, true)?)
+    let stdout = if let Some((file_name, append)) = extract_io_redirection(args, 1)? {
+        Descriptor::File(open_redirect_file(&file_name, append)?)
     } else {
         Descriptor::StandardOutput
     };
 
     // Look for standard error redirect.
-    let stderr = if let Some(file_name) = extract_io_redirection(args, 2)? {
-        Descriptor::File(open_redirect_file(&file_name, true)?)
+    let stderr = if let Some((file_name, append)) = extract_io_redirection(args, 2)? {
+        Descriptor::File(open_redirect_file(&file_name, append)?)
     } else {
         Descriptor::StandardError
     };
@@ -20,35 +25,40 @@ pub(crate) fn handle_io_redirections(args: &mut Vec<String>) -> Result<IoRedirec
     Ok(IoRedirections { stdout, stderr })
 }
 
-fn open_redirect_file(file_name: &str, truncate: bool) -> Result<File, String> {
+fn open_redirect_file(file_name: &str, append: bool) -> Result<File, String> {
     OpenOptions::new()
         .write(true)
         .create(true)
-        .truncate(truncate)
-        .open(&file_name)
+        .truncate(!append)
+        .append(append)
+        .open(file_name)
         .map_err(|e| format!("Failed to redirect to '{}': {:?}", file_name, e))
 }
 
-/// Looks for an IO redirection and removes it from the args list.
+/// Looks for an IO redirection in the args.
+/// Also removes the redirection from the args list.
 fn extract_io_redirection(
     args: &mut Vec<String>,
     descriptor: u8,
-) -> Result<Option<String>, String> {
-    if let Some(index) = args
-        .iter()
-        .position(|arg| arg == &format!("{}>", descriptor) || descriptor == 1 && arg == ">")
-    {
-        if index == args.len() - 1 {
-            return Err("Missing file name for standard output redirect".to_owned());
+) -> Result<Option<(String, bool)>, String> {
+    for index in 0..args.len() {
+        if args[index] == format!("{}>", descriptor)
+            || args[index] == format!("{}>>", descriptor)
+            || 1 == descriptor && (args[index] == ">" || args[index] == ">>")
+        {
+            if index == args.len() - 1 {
+                return Err("Missing file name for standard output redirect".to_owned());
+            }
+
+            // Remove the filename and the redirect operator from the list of args.
+            let file_name = args.remove(index + 1);
+            let redirect_operator = args.remove(index);
+
+            return Ok(Some((file_name, redirect_operator.ends_with(">>"))));
         }
-
-        let file_name = args.remove(index + 1);
-        args.remove(index);
-
-        Ok(Some(file_name))
-    } else {
-        Ok(None)
     }
+
+    Ok(None)
 }
 
 pub(crate) struct IoRedirections {
@@ -124,14 +134,14 @@ mod tests {
     fn it_extracts_redirect() {
         // Redirects of stdout with and without the descriptor id.
         assert_eq!(
-            Ok(Some("test.txt".to_owned())),
+            Ok(Some(("test.txt".to_owned(), false))),
             extract_io_redirection(
                 &mut ["hello", "1>", "test.txt"].map(str::to_owned).to_vec(),
                 1
             )
         );
         assert_eq!(
-            Ok(Some("test.txt".to_owned())),
+            Ok(Some(("test.txt".to_owned(), false))),
             extract_io_redirection(
                 &mut ["hello", ">", "test.txt"].map(str::to_owned).to_vec(),
                 1
@@ -140,10 +150,21 @@ mod tests {
 
         // Redirects of stderr.
         assert_eq!(
-            Ok(Some("test.txt".to_owned())),
+            Ok(Some(("test.txt".to_owned(), false))),
             extract_io_redirection(
                 &mut ["hello", "2>", "test.txt"].map(str::to_owned).to_vec(),
                 2
+            )
+        );
+
+        // Handles redirects at any position in the arguments.
+        assert_eq!(
+            Ok(Some(("test.txt".to_owned(), false))),
+            extract_io_redirection(
+                &mut ["hello", ">", "test.txt", "world"]
+                    .map(str::to_owned)
+                    .to_vec(),
+                1
             )
         );
     }
@@ -161,5 +182,33 @@ mod tests {
         let mut args = ["hello", "1>", "test.txt"].map(str::to_owned).to_vec();
         let _ = extract_io_redirection(&mut args, 1);
         assert_eq!(["hello".to_owned()].to_vec(), args);
+    }
+
+    #[test]
+    fn it_extracts_appending_redirect() {
+        // Redirects of stdout with and without the descriptor id.
+        assert_eq!(
+            Ok(Some(("test.txt".to_owned(), true))),
+            extract_io_redirection(
+                &mut ["hello", "1>>", "test.txt"].map(str::to_owned).to_vec(),
+                1
+            )
+        );
+        assert_eq!(
+            Ok(Some(("test.txt".to_owned(), true))),
+            extract_io_redirection(
+                &mut ["hello", ">>", "test.txt"].map(str::to_owned).to_vec(),
+                1
+            )
+        );
+
+        // Redirects of stderr.
+        assert_eq!(
+            Ok(Some(("test.txt".to_owned(), true))),
+            extract_io_redirection(
+                &mut ["hello", "2>>", "test.txt"].map(str::to_owned).to_vec(),
+                2
+            )
+        );
     }
 }
