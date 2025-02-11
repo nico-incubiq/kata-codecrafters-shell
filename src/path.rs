@@ -18,7 +18,7 @@ pub(crate) fn run_binary(
         command.stderr(io_redirections.stderr_as_stdio()?);
 
         // Start the program in a thread and wait for it to finish.
-        command.status().map(|_| {}).map_err(|e| format!("{:?}", e))
+        command.status().map(|_| {}).map_err(|e| format!("Command failed: {:?}", e))
     } else {
         Err(format!("{}: command not found", cmd))
     }
