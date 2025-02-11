@@ -28,10 +28,14 @@ fn repl() -> Result<(), String> {
     let mut io_redirections = handle_io_redirections(&mut args)?;
 
     // Interpret the command name and run it.
-    match BuiltInCommand::try_from(command.as_ref()) {
+    if let Err(e) = match BuiltInCommand::try_from(command.as_ref()) {
         Ok(built_in) => built_in.run(&args, &mut io_redirections),
         _ => run_binary(&command, &args, &mut io_redirections),
-    }
+    } {
+        io_redirections.ewriteln(format_args!("{}", e))?;
+    };
+
+    Ok(())
 }
 
 fn input_prompt() -> Result<String, String> {
