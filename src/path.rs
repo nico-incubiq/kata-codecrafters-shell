@@ -1,33 +1,53 @@
-use crate::io_redirection::IoRedirections;
+use crate::io_redirection::{IoRedirectionError, IoRedirections};
+use std::env::VarError;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub(crate) enum PathError {
+    #[error("{0}: command not found")]
+    CommandNotFound(String),
+
+    #[error("{0}: execution failed: {1:?}")]
+    CommandError(String, std::io::Error),
+
+    #[error("Failed to read environment variable: {0}")]
+    GetEnvFailed(#[from] VarError),
+
+    #[error(transparent)]
+    IoRedirectionFailed(#[from] IoRedirectionError),
+}
 
 pub(crate) fn run_binary(
     cmd: &str,
     args: &[String],
     io_redirections: &mut IoRedirections,
-) -> Result<(), String> {
-    if find_binary_in_path(cmd)?.is_some() {
-        let mut command = Command::new(cmd);
+) -> Result<(), PathError> {
+    let mut command = Command::new(cmd);
 
-        // Pass command args.
-        command.args(args);
+    // Pass command args.
+    command.args(args);
 
-        // Redirect standard output and error.
-        command.stdout(io_redirections.stdout_as_stdio()?);
-        command.stderr(io_redirections.stderr_as_stdio()?);
+    // Redirect standard output and error.
+    command.stdout(io_redirections.stdout_as_stdio()?);
+    command.stderr(io_redirections.stderr_as_stdio()?);
 
-        // Start the program in a thread and wait for it to finish.
-        command.status().map(|_| {}).map_err(|e| format!("Command failed: {:?}", e))
-    } else {
-        Err(format!("{}: command not found", cmd))
-    }
+    // Start the program in a thread and wait for it to finish, ignoring the exit status.
+    let _ = command.status().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            PathError::CommandNotFound(cmd.to_owned())
+        } else {
+            PathError::CommandError(cmd.to_owned(), e)
+        }
+    })?;
+
+    Ok(())
 }
 
-pub(crate) fn find_binary_in_path(name: &str) -> Result<Option<PathBuf>, String> {
+pub(crate) fn find_in_path(name: &str) -> Result<Option<PathBuf>, PathError> {
     // Load the PATH env variable.
-    let path =
-        std::env::var("PATH").map_err(|e| format!("Invalid PATH environment variable: {:?}", e))?;
+    let path = std::env::var("PATH")?;
     let directories = path.split(':');
 
     // Check whether the file exists in any of the directories.
