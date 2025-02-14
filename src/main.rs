@@ -2,6 +2,7 @@ mod builtin;
 mod io_redirection;
 mod path;
 mod quoting;
+mod autocomplete;
 
 use crate::builtin::{BuiltInCommand, BuiltInCommandError};
 use crate::io_redirection::{handle_io_redirections, IoRedirectionError};
@@ -9,14 +10,15 @@ use crate::path::{run_binary, PathError};
 use crate::quoting::{split_quoted_string, QuotingError};
 use std::io::Write;
 use thiserror::Error;
+use crate::autocomplete::{capture_input, AutocompleteError};
 
 #[derive(Error, Debug)]
 enum ShellError {
     #[error("Failed to print the prompt: {0:?}")]
     PrintPromptFailed(std::io::Error),
 
-    #[error("Failed to read the input: {0:?}")]
-    ReadInputFailed(std::io::Error),
+    #[error(transparent)]
+    Autocomplete(#[from] AutocompleteError),
 
     #[error("{0}: {1}")]
     BuiltIn(String, BuiltInCommandError),
@@ -41,8 +43,11 @@ fn main() {
 }
 
 fn repl() -> Result<(), ShellError> {
-    // Print the prompt and grab the input.
-    let input = input_prompt()?;
+    // Print the prompt.
+    print_input_prompt()?;
+
+    // Capture the user input.
+    let input = capture_input()?;
 
     // Split the command and arguments.
     let (command, mut args) = match parse_input(&input)? {
@@ -67,20 +72,12 @@ fn repl() -> Result<(), ShellError> {
     Ok(())
 }
 
-fn input_prompt() -> Result<String, ShellError> {
+fn print_input_prompt() -> Result<(), ShellError> {
     // Print the prompt.
     print!("$ ");
     std::io::stdout()
         .flush()
-        .map_err(ShellError::PrintPromptFailed)?;
-
-    // Wait for user input.
-    let mut input = String::new();
-    std::io::stdin()
-        .read_line(&mut input)
-        .map_err(ShellError::ReadInputFailed)?;
-
-    Ok(input.trim().to_owned())
+        .map_err(ShellError::PrintPromptFailed)
 }
 
 /// Parse the input string into a command and its arguments.
