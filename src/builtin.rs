@@ -63,6 +63,13 @@ impl TryFrom<&str> for BuiltInCommand {
 }
 
 impl BuiltInCommand {
+    /// Returns the full list of command names.
+    pub(crate) fn all_command_names() -> Vec<String> {
+        ["cd", "echo", "exit", "pwd", "type"]
+            .map(str::to_owned)
+            .to_vec()
+    }
+
     /// The printable name of the built-in function.
     pub(crate) fn name(&self) -> String {
         match self {

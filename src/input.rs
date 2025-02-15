@@ -1,3 +1,4 @@
+use crate::builtin::BuiltInCommand;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use std::fmt::Arguments;
@@ -37,8 +38,27 @@ pub(crate) fn capture_input() -> Result<String, InputError> {
         {
             match code {
                 KeyCode::Tab => {
-                    // Autocomplete
-                    todo!();
+                    // Find commands that start match the partial input.
+                    let matching_commands: Vec<_> = BuiltInCommand::all_command_names()
+                        .into_iter()
+                        .filter(|cmd| cmd.starts_with(&input))
+                        .collect();
+
+                    // Only autocomplete if exactly one command matches.
+                    if 1 == matching_commands.len() {
+                        let matching_command = &matching_commands[0];
+                        let original_input_len = input.len();
+
+                        // Complete the command in the input buffer and suffix with a space.
+                        input.push_str(&matching_command[original_input_len..]);
+                        input.push(' ');
+
+                        // Update the terminal accordingly.
+                        write(
+                            &mut stdout,
+                            format_args!("{}", &input[original_input_len..]),
+                        )?;
+                    }
                 }
                 KeyCode::Enter => {
                     // Print a carriage return and a new line.
