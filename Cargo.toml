@@ -7,4 +7,6 @@ rust-version = "1.80"
 
 [dependencies]
 crossterm = "^0.28.1" # Low-level terminal access.
-thiserror = "^2.0.11" # error handling
+thiserror = "^2.0.11" # Error handling.
+strum = "^0.27.0"     # Enum serialization.
+strum_macros = "^0.27.0"

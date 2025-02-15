@@ -2,6 +2,7 @@ use crate::io_redirection::{IoRedirectionError, IoRedirections};
 use crate::path::{find_in_path, PathError};
 use std::env::VarError;
 use std::num::ParseIntError;
+use strum_macros::{Display, EnumString, VariantNames};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -37,51 +38,25 @@ pub(crate) enum BuiltInCommandError {
     GetCurrentDirectoryFailed(#[source] std::io::Error),
 }
 
+pub(crate) fn try_into_builtin(command: &str) -> Result<BuiltInCommand, BuiltInCommandError> {
+    BuiltInCommand::try_from(command)
+        .map_err(|_| BuiltInCommandError::BuiltInCommandNotFound(command.to_owned()))
+}
+
+// Use strum to convert enum to string, parse from str, and list all variant names.
+#[derive(Display, EnumString, VariantNames)]
+#[strum(serialize_all = "snake_case")]
 pub(crate) enum BuiltInCommand {
+    #[strum(serialize = "cd")]
     ChangeDirectory,
     Echo,
     Exit,
+    #[strum(serialize = "pwd")]
     PrintWorkingDirectory,
     Type,
 }
 
-impl TryFrom<&str> for BuiltInCommand {
-    type Error = BuiltInCommandError;
-
-    fn try_from(command: &str) -> Result<Self, Self::Error> {
-        match command {
-            "cd" => Ok(BuiltInCommand::ChangeDirectory),
-            "echo" => Ok(BuiltInCommand::Echo),
-            "exit" => Ok(BuiltInCommand::Exit),
-            "pwd" => Ok(BuiltInCommand::PrintWorkingDirectory),
-            "type" => Ok(BuiltInCommand::Type),
-            _ => Err(BuiltInCommandError::BuiltInCommandNotFound(
-                command.to_owned(),
-            )),
-        }
-    }
-}
-
 impl BuiltInCommand {
-    /// Returns the full list of command names.
-    pub(crate) fn all_command_names() -> Vec<String> {
-        ["cd", "echo", "exit", "pwd", "type"]
-            .map(str::to_owned)
-            .to_vec()
-    }
-
-    /// The printable name of the built-in function.
-    pub(crate) fn name(&self) -> String {
-        match self {
-            BuiltInCommand::ChangeDirectory => "cd",
-            BuiltInCommand::Echo => "echo",
-            BuiltInCommand::Exit => "exit",
-            BuiltInCommand::PrintWorkingDirectory => "pwd",
-            BuiltInCommand::Type => "type",
-        }
-        .to_owned()
-    }
-
     /// Runs the built-in command.
     ///
     /// # Note
@@ -133,9 +108,8 @@ impl BuiltInCommand {
             BuiltInCommand::Type => {
                 let arg = get_single_argument(args)?;
 
-                if let Ok(sub_command) = BuiltInCommand::try_from(arg.as_ref()) {
-                    io_redirections
-                        .writeln(format_args!("{} is a shell builtin", sub_command.name()))?;
+                if let Ok(sub_command) = try_into_builtin(arg.as_ref()) {
+                    io_redirections.writeln(format_args!("{} is a shell builtin", sub_command))?;
                 } else if let Some(location) = find_in_path(&arg)? {
                     io_redirections.writeln(format_args!("{} is {}", arg, location.display()))?;
                 } else {

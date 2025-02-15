@@ -3,6 +3,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use std::fmt::Arguments;
 use std::io::{StdoutLock, Write};
+use strum::VariantNames;
 use thiserror::Error;
 
 const PROMPT: &str = "$ ";
@@ -39,8 +40,8 @@ pub(crate) fn capture_input() -> Result<String, InputError> {
             match code {
                 KeyCode::Tab => {
                     // Find commands that start match the partial input.
-                    let matching_commands: Vec<_> = BuiltInCommand::all_command_names()
-                        .into_iter()
+                    let matching_commands: Vec<_> = BuiltInCommand::VARIANTS
+                        .iter()
                         .filter(|cmd| cmd.starts_with(&input))
                         .collect();
 

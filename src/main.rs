@@ -4,7 +4,7 @@ mod io_redirection;
 mod path;
 mod quoting;
 
-use crate::builtin::{BuiltInCommand, BuiltInCommandError};
+use crate::builtin::{try_into_builtin, BuiltInCommandError};
 use crate::input::{capture_input, InputError};
 use crate::io_redirection::{handle_io_redirections, IoRedirectionError};
 use crate::path::{run_binary, PathError};
@@ -56,10 +56,10 @@ fn repl() -> Result<(), ShellError> {
     let mut io_redirections = handle_io_redirections(&mut args)?;
 
     // Interpret the command name and run it.
-    if let Err(e) = match BuiltInCommand::try_from(command.as_ref()) {
+    if let Err(e) = match try_into_builtin(command.as_ref()) {
         Ok(built_in) => built_in
             .run(&args, &mut io_redirections)
-            .map_err(|e| ShellError::BuiltIn(built_in.name(), e)),
+            .map_err(|e| ShellError::BuiltIn(built_in.to_string(), e)),
         _ => run_binary(&command, &args, &mut io_redirections).map_err(ShellError::Path),
     } {
         // Write errors to the standard error.
