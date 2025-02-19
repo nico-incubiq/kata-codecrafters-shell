@@ -76,6 +76,8 @@ pub(crate) fn capture_input() -> Result<String, InputError> {
 
                         // Abort.
                         return Err(InputError::Aborted);
+                    } else if !modifiers.is_empty() {
+                        eprintln!("Unexpected modifiers {:?}", modifiers);
                     }
 
                     // Add the char to the input string buffer and print it to the terminal.
@@ -86,8 +88,8 @@ pub(crate) fn capture_input() -> Result<String, InputError> {
                     let original_input_len = input.len();
                     if modifiers == KeyModifiers::CONTROL {
                         // Clear the input completely.
-                        //TODO: This branch actually is never hit as some sequences are badly handled
-                        //      by crossterm: https://github.com/crossterm-rs/crossterm/issues/685
+                        // TODO: This branch actually is never hit as some sequences are badly handled
+                        //       by crossterm: https://github.com/crossterm-rs/crossterm/issues/685
                         input.clear();
                     } else {
                         // Remove one char from the end of the input.

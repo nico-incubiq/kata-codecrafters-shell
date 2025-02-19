@@ -99,6 +99,7 @@ impl BuiltInCommand {
                     .parse::<i32>()
                     .map_err(|e| BuiltInCommandError::InvalidExitCode(arg, e))?;
 
+                // TODO: Not the cleanest way to exit the repl loop, as it doesn't perform any cleanup.
                 std::process::exit(exit_code);
             }
             BuiltInCommand::PrintWorkingDirectory => {
