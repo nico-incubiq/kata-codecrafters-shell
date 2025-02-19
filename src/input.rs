@@ -68,23 +68,25 @@ pub(crate) fn capture_input() -> Result<String, InputError> {
                     // Stop capture.
                     break;
                 }
-                KeyCode::Char(c) => {
-                    // Handle Ctrl+C to abort current input.
-                    if modifiers == KeyModifiers::CONTROL && c == 'c' {
-                        // Print a carriage return and a new line.
-                        write(&mut stdout, format_args!("\r\n"))?;
+                KeyCode::Char(character) => {
+                    match (modifiers, character) {
+                        (KeyModifiers::CONTROL, 'c') => {
+                            // Print a carriage return and a new line.
+                            write(&mut stdout, format_args!("\r\n"))?;
 
-                        // Abort.
-                        return Err(InputError::Aborted);
-                    } else if !modifiers.is_empty() {
-                        // Ignore unknown keyboard modifier sequences.
-
-                        continue;
+                            // Handle Ctrl+C to abort current repl input.
+                            return Err(InputError::Aborted);
+                        }
+                        (KeyModifiers::NONE, _) | (KeyModifiers::SHIFT, _) => {
+                            // Add the char to the input string buffer and print it to the terminal.
+                            input.push(character);
+                            write(&mut stdout, format_args!("{}", character))?;
+                        }
+                        _ => {
+                            // Ignore unknown sequences.
+                            continue;
+                        }
                     }
-
-                    // Add the char to the input string buffer and print it to the terminal.
-                    input.push(c);
-                    write(&mut stdout, format_args!("{}", c))?;
                 }
                 KeyCode::Backspace => {
                     let original_input_len = input.len();
