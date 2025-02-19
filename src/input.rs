@@ -46,7 +46,10 @@ pub(crate) fn capture_input() -> Result<String, InputError> {
                         .collect();
 
                     // Only autocomplete if exactly one command matches.
-                    if 1 == matching_commands.len() {
+                    if matching_commands.is_empty() {
+                        // Print the `\a` character to ring a bell.
+                        write(&mut stdout, format_args!("{}", 0x07 as char))?;
+                    } else if 1 == matching_commands.len() {
                         let matching_command = &matching_commands[0];
                         let original_input_len = input.len();
 
