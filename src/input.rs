@@ -110,6 +110,7 @@ pub(crate) fn capture_input() -> Result<String, InputError> {
                 }
                 _ => {
                     // Nothing else is supported for now...
+                    eprintln!("Unhandled event: {:?}", event);
                 }
             }
         }

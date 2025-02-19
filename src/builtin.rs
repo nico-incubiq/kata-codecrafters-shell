@@ -1,6 +1,7 @@
 use crate::io_redirection::{IoRedirectionError, IoRedirections};
 use crate::path::{find_in_path, PathError};
 use std::env::VarError;
+use std::io::ErrorKind;
 use std::num::ParseIntError;
 use strum_macros::{Display, EnumString, VariantNames};
 use thiserror::Error;
@@ -30,6 +31,10 @@ pub(crate) enum BuiltInCommandError {
 
     #[error("Failed to read environment variable: {0}")]
     GetEnvFailed(#[from] VarError),
+
+    // TODO: Remove this special case, it's only there to make codecrafter tests happy.
+    #[error("cd: {0}: No such file or directory")]
+    CdNoSuchFileOrDirectory(String),
 
     #[error("{0}: {1}")]
     ChangeDirectoryFailed(String, #[source] std::io::Error),
@@ -78,7 +83,11 @@ impl BuiltInCommand {
                 };
 
                 std::env::set_current_dir(&working_dir)
-                    .map_err(|e| BuiltInCommandError::ChangeDirectoryFailed(working_dir, e))?;
+                    .map_err(|e| if e.kind() == ErrorKind::NotFound {
+                        BuiltInCommandError::CdNoSuchFileOrDirectory(working_dir)
+                    } else {
+                        BuiltInCommandError::ChangeDirectoryFailed(working_dir, e)
+                    })?;
             }
             BuiltInCommand::Echo => {
                 io_redirections.writeln(format_args!("{}", args.join(" ")))?;
