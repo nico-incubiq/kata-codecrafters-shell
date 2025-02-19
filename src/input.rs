@@ -77,7 +77,9 @@ pub(crate) fn capture_input() -> Result<String, InputError> {
                         // Abort.
                         return Err(InputError::Aborted);
                     } else if !modifiers.is_empty() {
-                        eprintln!("Unexpected modifiers {:?}", modifiers);
+                        // Ignore unknown keyboard modifier sequences.
+
+                        continue;
                     }
 
                     // Add the char to the input string buffer and print it to the terminal.
@@ -112,7 +114,6 @@ pub(crate) fn capture_input() -> Result<String, InputError> {
                 }
                 _ => {
                     // Nothing else is supported for now...
-                    eprintln!("Unhandled event: {:?}", event);
                 }
             }
         }
