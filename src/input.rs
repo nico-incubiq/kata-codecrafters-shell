@@ -77,6 +77,13 @@ pub(crate) fn capture_input() -> Result<String, InputError> {
                             // Handle Ctrl+C to abort current repl input.
                             return Err(InputError::Aborted);
                         }
+                        (KeyModifiers::CONTROL, 'j') => {
+                            // Print a carriage return and a new line.
+                            write(&mut stdout, format_args!("\r\n"))?;
+
+                            // Handle Ctrl+J similarly to `Enter`.
+                            break;
+                        }
                         (KeyModifiers::NONE, _) | (KeyModifiers::SHIFT, _) => {
                             // Add the char to the input string buffer and print it to the terminal.
                             input.push(character);
