@@ -5,8 +5,6 @@ use std::fmt::Arguments;
 use std::io::{StdoutLock, Write};
 use thiserror::Error;
 
-const PROMPT: &str = "$ ";
-
 #[derive(Error, Debug)]
 pub(crate) enum InputError {
     #[error("Failed to setup raw terminal access: {0:?}")]
@@ -22,6 +20,8 @@ pub(crate) enum InputError {
     Aborted,
 }
 
+/// Takes control of the terminal to capture the input.
+/// Note: this puts the terminal in raw mode and handles every keystroke.
 pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, InputError> {
     // Lock stdout for more repeated writing.
     let mut stdout = std::io::stdout().lock();
@@ -30,7 +30,10 @@ pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, I
     enable_raw_mode().map_err(InputError::SetupFailed)?;
 
     // Print the prompt.
-    write(&mut stdout, format_args!("{}", PROMPT))?;
+    write(&mut stdout, build_prompt())?;
+
+    // Handles double-presses of TAB to display multiple autocompletes.
+    let mut multi_autocomplete_on = false;
 
     let mut input = String::new();
 
@@ -39,11 +42,17 @@ pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, I
             code, modifiers, ..
         }) = event
         {
+            // Disengage multi-autocomplete if any other key than tab is pressed.
+            if code != KeyCode::Tab {
+                multi_autocomplete_on = false;
+            }
+
             match code {
                 KeyCode::Tab => {
                     // Attempt to autocomplete the input.
                     let completions = autocomplete.completions(&input)?;
 
+                    // Only autocomplete if exactly 1 completion was found.
                     if let Some(completion) =
                         completions.iter().next().filter(|_| completions.len() == 1)
                     {
@@ -58,10 +67,27 @@ pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, I
                             &mut stdout,
                             format_args!("{}", &input[original_input_len..]),
                         )?;
+                    } else if completions.len() > 1 && multi_autocomplete_on {
+                        let mut completions: Vec<_> = completions.iter().cloned().collect();
+                        completions.sort();
+
+                        // Print a new line below the current one, print all the completions, then
+                        // print the prompt and current input again.
+                        write(
+                            &mut stdout,
+                            format_args!(
+                                "\r\n{}\r\n{}{}",
+                                completions.join("  "),
+                                build_prompt(),
+                                input
+                            ),
+                        )?;
                     } else {
-                        // Print the `\a` character to ring a bell if no completion exists.
-                        write(&mut stdout, format_args!("{}", 0x07 as char))?;
+                        ring_terminal_bell(&mut stdout)?;
                     }
+
+                    // Toggle multi-autocompletion, or disable it if len <= 1.
+                    multi_autocomplete_on = completions.len() > 1 && !multi_autocomplete_on;
                 }
                 KeyCode::Enter => {
                     // Print a carriage return and a new line.
@@ -101,24 +127,27 @@ pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, I
                     let original_input_len = input.len();
                     if modifiers == KeyModifiers::CONTROL {
                         // Clear the input completely.
-                        // TODO: This branch actually is never hit as some sequences are badly handled
-                        //       by crossterm: https://github.com/crossterm-rs/crossterm/issues/685
+                        // TODO: This branch is never hit as some sequences are badly handled by
+                        //       crossterm: https://github.com/crossterm-rs/crossterm/issues/685
                         input.clear();
                     } else {
                         // Remove one char from the end of the input.
                         let _ = input.pop();
                     }
 
-                    // Manually clear the removed char(s) from the screen by printing a space in its place.
-                    // Print the prompt and the input twice to avoid flashing if clearing it completely the first time.
+                    let prompt = build_prompt();
+                    let removed_chars = original_input_len - input.len();
+
+                    // Manually clear the removed char(s) from the screen by printing spaces.
+                    // Print the prompt and the input twice to avoid flashing.
                     write(
                         &mut stdout,
                         format_args!(
                             "\r{}{}{}\r{}{}",
-                            PROMPT,
+                            prompt,
                             input,
-                            " ".repeat(original_input_len - input.len()),
-                            PROMPT,
+                            " ".repeat(removed_chars),
+                            prompt,
                             input
                         ),
                     )?;
@@ -135,6 +164,18 @@ pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, I
     Ok(input)
 }
 
+/// Builds the prompt.
+fn build_prompt() -> Arguments<'static> {
+    format_args!("$ ")
+}
+
+/// Rings the terminal bell.
+fn ring_terminal_bell(stdout: &mut StdoutLock) -> Result<(), InputError> {
+    // Print the `\a` character to ring a bell if no completion exists.
+    write(stdout, format_args!("{}", 0x07 as char))
+}
+
+/// Outputs text to the terminal.
 fn write(stdout: &mut StdoutLock, text: Arguments) -> Result<(), InputError> {
     // Print the text to the terminal buffer and flush it.
     write!(stdout, "{}", text).map_err(InputError::WriteStdoutFailed)?;
