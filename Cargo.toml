@@ -1,9 +1,8 @@
 [package]
 name = "codecrafters-shell"
 version = "0.1.0"
-authors = ["Codecrafters <hello@codecrafters.io>"]
+authors = ["Nicolas Séverin <me@nseverin.fr>"]
 edition = "2021"
-rust-version = "1.80"
 
 [dependencies]
 crossterm = "^0.28.1" # Cross-platform low-level terminal access.

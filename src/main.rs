@@ -18,8 +18,8 @@ enum ShellError {
     #[error(transparent)]
     Autocomplete(#[from] InputError),
 
-    #[error(transparent)]
-    BuiltIn(#[from] BuiltInCommandError),
+    #[error("{0}: {1}")]
+    BuiltIn(String, BuiltInCommandError),
 
     #[error(transparent)]
     IoRedirection(#[from] IoRedirectionError),
@@ -64,9 +64,7 @@ fn repl() -> Result<(), ShellError> {
     if let Err(e) = match try_into_builtin(command.as_ref()) {
         Ok(built_in) => built_in
             .run(&args, &mut io_redirections)
-            .map_err(ShellError::BuiltIn),
-        // TODO: Prefix error with built-in command name, and remove CdNoSuchFileOrDirectory special case.
-        // .map_err(|e| ShellError::BuiltIn(built_in.to_string(), e)),
+            .map_err(|e| ShellError::BuiltIn(built_in.to_string(), e)),
         _ => run_binary(&command, &args, &mut io_redirections).map_err(ShellError::Path),
     } {
         // Write errors to the standard error.
