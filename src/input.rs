@@ -42,33 +42,40 @@ pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, I
             code, modifiers, ..
         }) = event
         {
-            // Disengage multi-autocomplete if any other key than tab is pressed.
+            // Disengage multi-autocomplete if any other key than TAB is pressed.
             if code != KeyCode::Tab {
                 multi_autocomplete_on = false;
             }
 
             match code {
                 KeyCode::Tab => {
-                    // Attempt to autocomplete the input.
-                    let completions = autocomplete.completions(&input)?;
+                    let original_input_len = input.len();
 
-                    // Only autocomplete if exactly 1 completion was found.
-                    if let Some(completion) =
-                        completions.iter().next().filter(|_| completions.len() == 1)
-                    {
-                        let original_input_len = input.len();
+                    // Look for completions for the input.
+                    let mut completions: Vec<_> =
+                        autocomplete.completions(&input)?.into_iter().collect();
 
-                        // Complete the command in the input buffer and suffix with a space.
-                        input.push_str(&completion[original_input_len..]);
-                        input.push(' ');
+                    if !completions.is_empty() {
+                        let longest_prefix = longest_prefix(&completions);
+
+                        // Partially autocomplete to the longest common completions prefix.
+                        input.push_str(&longest_prefix[original_input_len..]);
 
                         // Update the terminal accordingly.
                         write(
                             &mut stdout,
                             format_args!("{}", &input[original_input_len..]),
                         )?;
+                    }
+
+                    if completions.len() == 1 {
+                        // If exactly 1 completion was found, append a space after the command.
+                        input.push(' ');
+
+                        // Update the terminal accordingly.
+                        write(&mut stdout, format_args!(" "))?;
                     } else if completions.len() > 1 && multi_autocomplete_on {
-                        let mut completions: Vec<_> = completions.iter().cloned().collect();
+                        // Print all completions if multiple were found and TAB was pressed twice.
                         completions.sort();
 
                         // Print a new line below the current one, print all the completions, then
@@ -83,6 +90,7 @@ pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, I
                             ),
                         )?;
                     } else {
+                        // No completion found or multiple completions but pressed TAB only once.
                         ring_terminal_bell(&mut stdout)?;
                     }
 
@@ -164,6 +172,24 @@ pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, I
     Ok(input)
 }
 
+fn longest_prefix(completions: &[String]) -> String {
+    let first_completion = completions
+        .first()
+        .map(|c| c.to_owned())
+        .unwrap_or_default();
+
+    // Look for the first char of the first completion which is not common to all completions.
+    for (index, char) in first_completion.chars().enumerate() {
+        for completion in completions {
+            if !completion.chars().nth(index).is_some_and(|c| c == char) {
+                return first_completion[0..index].to_owned();
+            }
+        }
+    }
+
+    first_completion
+}
+
 /// Builds the prompt.
 fn build_prompt() -> Arguments<'static> {
     format_args!("$ ")
@@ -182,4 +208,30 @@ fn write(stdout: &mut StdoutLock, text: Arguments) -> Result<(), InputError> {
     stdout.flush().map_err(InputError::WriteStdoutFailed)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::input::longest_prefix;
+
+    #[test]
+    fn it_finds_longest_prefix() {
+        // No completion in the list.
+        assert_eq!("", longest_prefix(&[]));
+
+        // Just one completion in the list.
+        assert_eq!("e", longest_prefix(&["e"].map(str::to_owned)));
+
+        // Multiple completions sharing a few common chars.
+        assert_eq!("e", longest_prefix(&["echo", "exit"].map(str::to_owned)));
+        assert_eq!(
+            "echo",
+            longest_prefix(&["echo", "echo_two"].map(str::to_owned))
+        );
+        assert_eq!("ec", longest_prefix(&["echo", "ec"].map(str::to_owned)));
+
+        // Multiple completions with no common chars.
+        assert_eq!("", longest_prefix(&["echo", "write"].map(str::to_owned)));
+        assert_eq!("", longest_prefix(&["echo", "w"].map(str::to_owned)));
+    }
 }
