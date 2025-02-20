@@ -1,9 +1,11 @@
+mod autocomplete;
 mod builtin;
 mod input;
 mod io_redirection;
 mod path;
 mod quoting;
 
+use crate::autocomplete::CompositeAutocomplete;
 use crate::builtin::{try_into_builtin, BuiltInCommandError};
 use crate::input::{capture_input, InputError};
 use crate::io_redirection::{handle_io_redirections, IoRedirectionError};
@@ -39,8 +41,11 @@ fn main() {
 }
 
 fn repl() -> Result<(), ShellError> {
+    // Initialise autocompletion.
+    let autocomplete = CompositeAutocomplete::new();
+
     // Capture the user input.
-    let input = match capture_input() {
+    let input = match capture_input(autocomplete) {
         // Start new repl iteration on abortion.
         Err(InputError::Aborted) => return Ok(()),
         res => res?,
@@ -58,9 +63,10 @@ fn repl() -> Result<(), ShellError> {
     // Interpret the command name and run it.
     if let Err(e) = match try_into_builtin(command.as_ref()) {
         Ok(built_in) => built_in
-            .run(&args, &mut io_redirections).map_err(ShellError::BuiltIn),
-            // TODO: Prefix error with built-in command name, and remove CdNoSuchFileOrDirectory special case.
-            // .map_err(|e| ShellError::BuiltIn(built_in.to_string(), e)),
+            .run(&args, &mut io_redirections)
+            .map_err(ShellError::BuiltIn),
+        // TODO: Prefix error with built-in command name, and remove CdNoSuchFileOrDirectory special case.
+        // .map_err(|e| ShellError::BuiltIn(built_in.to_string(), e)),
         _ => run_binary(&command, &args, &mut io_redirections).map_err(ShellError::Path),
     } {
         // Write errors to the standard error.

@@ -1,4 +1,6 @@
 use crate::io_redirection::{IoRedirectionError, IoRedirections};
+use is_executable::IsExecutable;
+use std::collections::HashSet;
 use std::env::VarError;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -45,15 +47,51 @@ pub(crate) fn run_binary(
     Ok(())
 }
 
-pub(crate) fn find_in_path(name: &str) -> Result<Option<PathBuf>, PathError> {
-    // Load the PATH env variable.
-    let path = std::env::var("PATH")?;
-    let directories = path.split(':');
-
+/// Finds a file which name is an exact match in the user PATH.
+pub(crate) fn find_file_in_path(name: &str) -> Result<Option<PathBuf>, PathError> {
     // Check whether the file exists in any of the directories.
-    let location = directories
+    let location = get_path_directories()?
         .into_iter()
-        .find_map(|dir| Some(Path::new(dir).join(name)).filter(|location| location.exists()));
+        .find_map(|dir| Some(dir.join(name)).filter(|location| location.exists()));
 
     Ok(location)
+}
+
+/// Finds executables matching the partial name in the user PATH.
+/// This is used for autocompletion, so the start of executable names must match the input.
+pub(crate) fn find_partial_executable_matches_in_path(
+    partial_name: &str,
+) -> Result<HashSet<String>, PathError> {
+    let matched_executables: HashSet<_> = get_path_directories()?
+        .into_iter()
+        // List files in PATH directories, ignoring errors (missing directory, permissions, ...).
+        .filter_map(|path| path.read_dir().ok())
+        .flatten()
+        // Ignore file errors.
+        .filter_map(|file| file.ok())
+        // Ignore invalid UTF-8 filenames.
+        .filter_map(|file| {
+            let file_name = file.file_name().into_string().ok();
+
+            file_name.map(|file_name| (file, file_name))
+        })
+        // Only keep files for which the start of the name matches the input.
+        .filter(|(_, file_name)| file_name.starts_with(partial_name))
+        // Only keep executable files.
+        .filter(|(file, _)| file.path().is_executable())
+        .map(|(_, file_name)| file_name)
+        .collect();
+
+    Ok(matched_executables)
+}
+
+fn get_path_directories() -> Result<Vec<PathBuf>, PathError> {
+    // Load the PATH env variable.
+    let path = std::env::var("PATH")?;
+    let directories: Vec<_> = path
+        .split(':')
+        .map(|dir| Path::new(dir).to_path_buf())
+        .collect();
+
+    Ok(directories)
 }

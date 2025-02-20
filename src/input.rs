@@ -1,9 +1,8 @@
-use crate::builtin::BuiltInCommand;
+use crate::autocomplete::{Autocomplete, AutocompleteError};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use std::fmt::Arguments;
 use std::io::{StdoutLock, Write};
-use strum::VariantNames;
 use thiserror::Error;
 
 const PROMPT: &str = "$ ";
@@ -16,11 +15,14 @@ pub(crate) enum InputError {
     #[error("Failed to write to the standard output: {0:?}")]
     WriteStdoutFailed(std::io::Error),
 
+    #[error("Autocomplete failed: {0}")]
+    Autocomplete(#[from] AutocompleteError),
+
     #[error("The user pressed an abortion control sequence")]
     Aborted,
 }
 
-pub(crate) fn capture_input() -> Result<String, InputError> {
+pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, InputError> {
     // Lock stdout for more repeated writing.
     let mut stdout = std::io::stdout().lock();
 
@@ -39,22 +41,16 @@ pub(crate) fn capture_input() -> Result<String, InputError> {
         {
             match code {
                 KeyCode::Tab => {
-                    // Find commands that start match the partial input.
-                    let matching_commands: Vec<_> = BuiltInCommand::VARIANTS
-                        .iter()
-                        .filter(|cmd| cmd.starts_with(&input))
-                        .collect();
+                    // Attempt to autocomplete the input.
+                    let completions = autocomplete.completions(&input)?;
 
-                    // Only autocomplete if exactly one command matches.
-                    if matching_commands.is_empty() {
-                        // Print the `\a` character to ring a bell.
-                        write(&mut stdout, format_args!("{}", 0x07 as char))?;
-                    } else if 1 == matching_commands.len() {
-                        let matching_command = &matching_commands[0];
+                    if let Some(completion) =
+                        completions.iter().next().filter(|_| completions.len() == 1)
+                    {
                         let original_input_len = input.len();
 
                         // Complete the command in the input buffer and suffix with a space.
-                        input.push_str(&matching_command[original_input_len..]);
+                        input.push_str(&completion[original_input_len..]);
                         input.push(' ');
 
                         // Update the terminal accordingly.
@@ -62,6 +58,9 @@ pub(crate) fn capture_input() -> Result<String, InputError> {
                             &mut stdout,
                             format_args!("{}", &input[original_input_len..]),
                         )?;
+                    } else {
+                        // Print the `\a` character to ring a bell if no completion exists.
+                        write(&mut stdout, format_args!("{}", 0x07 as char))?;
                     }
                 }
                 KeyCode::Enter => {

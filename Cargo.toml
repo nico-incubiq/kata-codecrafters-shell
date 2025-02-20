@@ -6,7 +6,8 @@ edition = "2021"
 rust-version = "1.80"
 
 [dependencies]
-crossterm = "^0.28.1" # Low-level terminal access.
+crossterm = "^0.28.1" # Cross-platform low-level terminal access.
+is_executable = "^1.0.4" # Cross-platform executable file checker.
 thiserror = "^2.0.11" # Error handling.
-strum = "^0.27.0"     # Enum serialization.
+strum = "^0.27.0" # Enum serialization.
 strum_macros = "^0.27.0"

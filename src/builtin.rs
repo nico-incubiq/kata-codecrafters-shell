@@ -1,5 +1,5 @@
 use crate::io_redirection::{IoRedirectionError, IoRedirections};
-use crate::path::{find_in_path, PathError};
+use crate::path::{find_file_in_path, PathError};
 use std::env::VarError;
 use std::io::ErrorKind;
 use std::num::ParseIntError;
@@ -82,12 +82,13 @@ impl BuiltInCommand {
                     arg
                 };
 
-                std::env::set_current_dir(&working_dir)
-                    .map_err(|e| if e.kind() == ErrorKind::NotFound {
+                std::env::set_current_dir(&working_dir).map_err(|e| {
+                    if e.kind() == ErrorKind::NotFound {
                         BuiltInCommandError::CdNoSuchFileOrDirectory(working_dir)
                     } else {
                         BuiltInCommandError::ChangeDirectoryFailed(working_dir, e)
-                    })?;
+                    }
+                })?;
             }
             BuiltInCommand::Echo => {
                 io_redirections.writeln(format_args!("{}", args.join(" ")))?;
@@ -120,7 +121,7 @@ impl BuiltInCommand {
 
                 if let Ok(sub_command) = try_into_builtin(arg.as_ref()) {
                     io_redirections.writeln(format_args!("{} is a shell builtin", sub_command))?;
-                } else if let Some(location) = find_in_path(&arg)? {
+                } else if let Some(location) = find_file_in_path(&arg)? {
                     io_redirections.writeln(format_args!("{} is {}", arg, location.display()))?;
                 } else {
                     return Err(BuiltInCommandError::PathCommandNotFound(arg));
