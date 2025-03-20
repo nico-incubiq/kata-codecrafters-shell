@@ -34,3 +34,7 @@ REPLs, builtin commands, and more.
 - Ring the terminal bell when no completion available
 - Partial completions when multiple completions share a prefix
 - Multi-completion by double-pressing TAB
+
+# TODO: Improvements
+- Custom prompt (git status, ...)
+- Command history Ctrl+R
