@@ -26,7 +26,8 @@ REPLs, builtin commands, and more.
 
 ## Redirection
 - Stdout and Stderr redirection
-- Overriding with `>` and appending with `>>`
+- Overriding with `>` and appending with `>>` (must be surrounded by spaces)
+- Piping commands with `|` (must be surrounded by spaces)
 
 ## Autocompletion
 - Built-in commands
