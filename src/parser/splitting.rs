@@ -99,56 +99,47 @@ pub(crate) fn parse_input(input: &str) -> Result<Vec<Command>, SplittingError> {
                         return Err(SplittingError::ProgramExpected(text));
                     }
 
-                    let descriptor: u8 = match groups.name("from") {
+                    let descriptor: u8 = groups
+                        .name("from")
                         // Safe to unwrap as the regex only matches digits.
-                        Some(descriptor) => descriptor.as_str().parse().unwrap(),
-                        // .map_err(|_| {
-                        //     ParsingError::InvalidIoDescriptor(descriptor.as_str().to_string())
-                        // })?,
-                        None => 1,
-                    };
+                        .map_or(1, |m| m.as_str().parse().unwrap());
 
                     let overwrite = groups.name("overwrite").is_some();
 
-                    let destination = match groups.name("to") {
-                        Some(descriptor) => {
-                            // Safe to unwrap as the regex only matches digits.
-                            let descriptor: u8 = descriptor.as_str()[1..].parse().unwrap();
-                            // .map_err(|_| {
-                            //     ParsingError::InvalidIoDescriptor(descriptor.as_str()[1..].to_string())
-                            // })?;
-                            RedirectDestination::Descriptor(descriptor)
-                        }
-                        None => {
-                            let filename = match iter
-                                .next()
-                                .ok_or(SplittingError::MissingRedirectDestination)?
-                            {
-                                InputChunk::QuotedText(text) => text,
-                                InputChunk::RawText(text) => {
-                                    if text == "|" || redirection_regex.is_match(&text) {
-                                        return Err(SplittingError::MissingRedirectDestination);
-                                    }
-
-                                    text
+                    let destination = if let Some(descriptor) = groups.name("to") {
+                        // Safe to unwrap as the regex only matches digits.
+                        let descriptor: u8 = descriptor.as_str()[1..].parse().unwrap();
+                        // .map_err(|_| {
+                        //     ParsingError::InvalidIoDescriptor(descriptor.as_str()[1..].to_string())
+                        // })?;
+                        RedirectDestination::Descriptor(descriptor)
+                    } else {
+                        let filename = match iter
+                            .next()
+                            .ok_or(SplittingError::MissingRedirectDestination)?
+                        {
+                            InputChunk::QuotedText(text) => text,
+                            InputChunk::RawText(text) => {
+                                if text == "|" || redirection_regex.is_match(&text) {
+                                    return Err(SplittingError::MissingRedirectDestination);
                                 }
-                            };
 
-                            RedirectDestination::File(filename)
-                        }
+                                text
+                            }
+                        };
+
+                        RedirectDestination::File(filename)
                     };
 
                     current_redirections.push(Redirect {
                         descriptor,
                         overwrite,
                         destination,
-                    })
+                    });
+                } else if current_program.is_none() {
+                    current_program = Some(text);
                 } else {
-                    if current_program.is_none() {
-                        current_program = Some(text);
-                    } else {
-                        current_args.push(text);
-                    }
+                    current_args.push(text);
                 }
             }
         }

@@ -36,7 +36,7 @@ fn main() {
     loop {
         if let Err(error) = repl() {
             // Print any error that couldn't be printed to the potential stderr redirection.
-            eprintln!("{}", error);
+            eprintln!("{error}");
         }
     }
 }
@@ -46,7 +46,7 @@ fn repl() -> Result<(), ShellError> {
     let autocomplete = CompositeAutocomplete::new();
 
     // Capture the user input.
-    let input = match capture_input(autocomplete) {
+    let input = match capture_input(&autocomplete) {
         // Start a new repl iteration on abortion.
         Err(InputError::Aborted) => return Ok(()),
         res => res?,

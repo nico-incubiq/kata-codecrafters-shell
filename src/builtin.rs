@@ -99,7 +99,7 @@ impl BuiltInCommand {
                         max: 0,
                         found: args.len(),
                     });
-                };
+                }
 
                 let cwd = std::env::current_dir()
                     .map_err(BuiltInCommandError::GetCurrentDirectoryFailed)?;
@@ -110,14 +110,14 @@ impl BuiltInCommand {
                 let arg = get_single_argument(args)?;
 
                 if let Ok(sub_command) = try_into_builtin(arg.as_ref()) {
-                    io_redirections.writeln(format_args!("{} is a shell builtin", sub_command))?;
+                    io_redirections.writeln(format_args!("{sub_command} is a shell builtin"))?;
                 } else if let Some(location) = find_file_in_path(&arg)? {
                     io_redirections.writeln(format_args!("{} is {}", arg, location.display()))?;
                 } else {
                     return Err(BuiltInCommandError::PathCommandNotFound(arg));
                 }
             }
-        };
+        }
 
         Ok(())
     }

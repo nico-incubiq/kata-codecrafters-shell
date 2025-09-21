@@ -55,7 +55,7 @@ impl Autocomplete for BuiltInAutocompletion {
         let builtins = BuiltInCommand::VARIANTS
             .iter()
             .filter(|cmd| cmd.starts_with(input))
-            .map(|cmd| cmd.to_string())
+            .map(ToString::to_string)
             .collect();
 
         Ok(builtins)

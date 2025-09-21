@@ -22,7 +22,7 @@ pub(crate) enum InputError {
 
 /// Takes control of the terminal to capture the input.
 /// Note: this puts the terminal in raw mode and handles every keystroke.
-pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, InputError> {
+pub(crate) fn capture_input(autocomplete: &impl Autocomplete) -> Result<String, InputError> {
     // Lock stdout for more repeated writing.
     let mut stdout = std::io::stdout().lock();
 
@@ -110,7 +110,7 @@ pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, I
                             // Print a carriage return and a new line.
                             write(&mut stdout, format_args!("\r\n"))?;
 
-                            // Handle Ctrl+C to abort current repl input.
+                            // Handle Ctrl+C to abort the current repl input.
                             return Err(InputError::Aborted);
                         }
                         (KeyModifiers::CONTROL, 'j') => {
@@ -120,14 +120,13 @@ pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, I
                             // Handle Ctrl+J similarly to `Enter`.
                             break;
                         }
-                        (KeyModifiers::NONE, _) | (KeyModifiers::SHIFT, _) => {
+                        (KeyModifiers::NONE | KeyModifiers::SHIFT, _) => {
                             // Add the char to the input string buffer and print it to the terminal.
                             input.push(character);
-                            write(&mut stdout, format_args!("{}", character))?;
+                            write(&mut stdout, format_args!("{character}"))?;
                         }
                         _ => {
                             // Ignore unknown sequences.
-                            continue;
                         }
                     }
                 }
@@ -175,14 +174,19 @@ pub(crate) fn capture_input(autocomplete: impl Autocomplete) -> Result<String, I
 fn longest_prefix(completions: &[String]) -> String {
     let first_completion = completions
         .first()
-        .map(|c| c.to_owned())
+        .map(ToOwned::to_owned)
         .unwrap_or_default();
 
-    // Look for the first char of the first completion which is not common to all completions.
+    let mut other_completions = completions
+        .iter()
+        .skip(1)
+        .map(|completion| completion.chars())
+        .collect::<Vec<_>>();
+
     for (index, char) in first_completion.chars().enumerate() {
-        for completion in completions {
-            if !completion.chars().nth(index).is_some_and(|c| c == char) {
-                return first_completion[0..index].to_owned();
+        for completion in &mut other_completions {
+            if completion.next().is_none_or(|c| c != char) {
+                return first_completion.chars().take(index).collect();
             }
         }
     }
@@ -198,13 +202,13 @@ fn build_prompt() -> Arguments<'static> {
 /// Rings the terminal bell.
 fn ring_terminal_bell(stdout: &mut StdoutLock) -> Result<(), InputError> {
     // Print the `\a` character to ring a bell if no completion exists.
-    write(stdout, format_args!("{}", 0x07 as char))
+    write(stdout, format_args!("\x07"))
 }
 
 /// Outputs text to the terminal.
 fn write(stdout: &mut StdoutLock, text: Arguments) -> Result<(), InputError> {
     // Print the text to the terminal buffer and flush it.
-    write!(stdout, "{}", text).map_err(InputError::WriteStdoutFailed)?;
+    write!(stdout, "{text}").map_err(InputError::WriteStdoutFailed)?;
     stdout.flush().map_err(InputError::WriteStdoutFailed)?;
 
     Ok(())
@@ -220,18 +224,30 @@ mod tests {
         assert_eq!("", longest_prefix(&[]));
 
         // Just one completion in the list.
-        assert_eq!("e", longest_prefix(&["e"].map(str::to_owned)));
+        assert_eq!("e", longest_prefix(&["e"].map(ToOwned::to_owned)));
 
         // Multiple completions sharing a few common chars.
-        assert_eq!("e", longest_prefix(&["echo", "exit"].map(str::to_owned)));
+        assert_eq!(
+            "e",
+            longest_prefix(&["echo", "exit"].map(ToOwned::to_owned))
+        );
         assert_eq!(
             "echo",
-            longest_prefix(&["echo", "echo_two"].map(str::to_owned))
+            longest_prefix(&["echo", "echo_two"].map(ToOwned::to_owned))
         );
-        assert_eq!("ec", longest_prefix(&["echo", "ec"].map(str::to_owned)));
+        assert_eq!("ec", longest_prefix(&["echo", "ec"].map(ToOwned::to_owned)));
 
         // Multiple completions with no common chars.
-        assert_eq!("", longest_prefix(&["echo", "write"].map(str::to_owned)));
-        assert_eq!("", longest_prefix(&["echo", "w"].map(str::to_owned)));
+        assert_eq!(
+            "",
+            longest_prefix(&["echo", "write"].map(ToOwned::to_owned))
+        );
+        assert_eq!("", longest_prefix(&["echo", "w"].map(ToOwned::to_owned)));
+
+        // Including some multibyte characters.
+        assert_eq!(
+            "a⚠️c",
+            longest_prefix(&["a⚠️cdef", "a⚠️c👨‍👩‍👧"].map(ToOwned::to_owned))
+        );
     }
 }

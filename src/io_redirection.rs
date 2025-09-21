@@ -65,8 +65,8 @@ fn extract_io_redirection(
     descriptor: u8,
 ) -> Result<Option<(String, bool)>, IoRedirectionError> {
     for index in 0..args.len() {
-        if args[index] == format!("{}>", descriptor)
-            || args[index] == format!("{}>>", descriptor)
+        if args[index] == format!("{descriptor}>")
+            || args[index] == format!("{descriptor}>>")
             || 1 == descriptor && (args[index] == ">" || args[index] == ">>")
         {
             if index == args.len() - 1 {
@@ -119,10 +119,10 @@ enum Descriptor {
 impl Descriptor {
     fn writeln(&mut self, args: std::fmt::Arguments) -> Result<(), IoRedirectionError> {
         match self {
-            Descriptor::File(name, file) => writeln!(file, "{}", args)
+            Descriptor::File(name, file) => writeln!(file, "{args}")
                 .map_err(|e| IoRedirectionError::FileWriteFailed(name.to_owned(), e)),
             Descriptor::StandardOutput | Descriptor::StandardError => {
-                writeln!(stdout(), "{}", args).map_err(IoRedirectionError::StandardIoWriteFailed)
+                writeln!(stdout(), "{args}").map_err(IoRedirectionError::StandardIoWriteFailed)
             }
         }
     }

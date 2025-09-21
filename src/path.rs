@@ -68,7 +68,7 @@ pub(crate) fn find_partial_executable_matches_in_path(
         .filter_map(|path| path.read_dir().ok())
         .flatten()
         // Ignore file errors.
-        .filter_map(|file| file.ok())
+        .filter_map(Result::ok)
         // Ignore invalid UTF-8 filenames.
         .filter_map(|file| {
             let file_name = file.file_name().into_string().ok();
