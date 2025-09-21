@@ -1,12 +1,9 @@
-use crate::parser::quoting::{split_quoted_string, InputChunk, QuotingError};
+use crate::parser::quoting::InputChunk;
 use regex::Regex;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub(crate) enum SplittingError {
-    #[error(transparent)]
-    Quoting(#[from] QuotingError),
-
     #[error("Expected program, got: {0}")]
     ProgramExpected(String),
 
@@ -57,10 +54,8 @@ impl Command {
 // -  echo hello '|' world 1>&2 2> out.txt : writes to stdout, because 1>&2 writes to stderr before the redirection is set up
 
 /// Parses the input string into a list of commands piped into each other.
-pub(crate) fn parse_input(input: &str) -> Result<Vec<Command>, SplittingError> {
-    let values = split_quoted_string(input)?;
-
-    if values.is_empty() {
+pub(crate) fn split_commands(chunks: Vec<InputChunk>) -> Result<Vec<Command>, SplittingError> {
+    if chunks.is_empty() {
         return Ok(vec![]);
     }
 
@@ -72,7 +67,7 @@ pub(crate) fn parse_input(input: &str) -> Result<Vec<Command>, SplittingError> {
     let mut current_args: Vec<String> = vec![];
     let mut current_redirections: Vec<Redirect> = vec![];
 
-    let mut iter = values.into_iter();
+    let mut iter = chunks.into_iter();
     while let Some(value) = iter.next() {
         match value {
             InputChunk::QuotedText(text) => {
@@ -156,13 +151,22 @@ pub(crate) fn parse_input(input: &str) -> Result<Vec<Command>, SplittingError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_input, RedirectDestination, SplittingError};
+    use super::{split_commands, RedirectDestination, SplittingError};
+    use crate::parser::quoting::InputChunk;
+
+    fn raw(text: &str) -> InputChunk {
+        InputChunk::RawText(text.to_owned())
+    }
+
+    fn quoted(text: &str) -> InputChunk {
+        InputChunk::QuotedText(text.to_owned())
+    }
 
     #[test]
     fn it_parses_single_command_without_redirect() {
-        let input = "echo hello";
+        let input = vec![raw("echo"), raw("hello")];
 
-        let commands = parse_input(input).unwrap();
+        let commands = split_commands(input).unwrap();
 
         assert_eq!(1, commands.len());
         assert_eq!("echo", commands[0].program);
@@ -172,18 +176,31 @@ mod tests {
 
     #[test]
     fn it_parses_piped_commands() {
-        let input = r#"'echo' hello\nworld | 'grep' "hello""#;
+        let input = vec![
+            quoted("echo"),
+            raw("hello\nworld"),
+            raw("|"),
+            quoted("grep"),
+            quoted("hello"),
+        ];
 
-        let commands = parse_input(input).unwrap();
+        let commands = split_commands(input).unwrap();
 
         assert_eq!(2, commands.len());
     }
 
     #[test]
     fn it_parses_file_redirections() {
-        let input = "echo hello > out.txt 2> err.txt";
+        let input = vec![
+            raw("echo"),
+            raw("hello"),
+            raw(">"),
+            raw("out.txt"),
+            raw("2>"),
+            raw("err.txt"),
+        ];
 
-        let commands = parse_input(input).unwrap();
+        let commands = split_commands(input).unwrap();
 
         assert_eq!(1, commands.len());
         assert_eq!(1, commands[0].arguments.len());
@@ -202,9 +219,19 @@ mod tests {
 
     #[test]
     fn it_parses_redirections_in_each_piped_command() {
-        let input = "echo hello\nworld > first.txt | grep world > second.txt";
+        let input = vec![
+            raw("echo"),
+            raw("hello\nworld"),
+            raw(">"),
+            raw("first.txt"),
+            raw("|"),
+            raw("grep"),
+            raw("world"),
+            raw(">"),
+            raw("second.txt"),
+        ];
 
-        let commands = parse_input(input).unwrap();
+        let commands = split_commands(input).unwrap();
 
         assert_eq!(2, commands.len());
         assert_eq!(1, commands[0].redirects.len());
@@ -213,9 +240,9 @@ mod tests {
 
     #[test]
     fn it_parses_descriptor_redirections() {
-        let input = "echo hello 1>&2";
+        let input = vec![raw("echo"), raw("hello"), raw("1>&2")];
 
-        let commands = parse_input(input).unwrap();
+        let commands = split_commands(input).unwrap();
 
         assert_eq!(1, commands.len());
         assert_eq!(1, commands[0].redirects.len());
@@ -228,9 +255,9 @@ mod tests {
 
     #[test]
     fn it_parses_overwrite_redirections() {
-        let input = "echo hello >> out.txt";
+        let input = vec![raw("echo"), raw("hello"), raw(">>"), raw("out.txt")];
 
-        let commands = parse_input(input).unwrap();
+        let commands = split_commands(input).unwrap();
 
         assert_eq!(1, commands.len());
         assert_eq!(1, commands[0].redirects.len());
@@ -239,9 +266,9 @@ mod tests {
 
     #[test]
     fn it_ignores_quoted_pipes() {
-        let input = "echo hello '|' world";
+        let input = vec![raw("echo"), raw("hello"), quoted("|"), raw("world")];
 
-        let commands = parse_input(input).unwrap();
+        let commands = split_commands(input).unwrap();
 
         assert_eq!(1, commands.len());
         assert_eq!(3, commands[0].arguments.len());
@@ -250,9 +277,9 @@ mod tests {
     #[test]
     fn it_rejects_erroneous_inputs() {
         // Starting with a pipe.
-        let input = "| echo hello";
+        let input = vec![raw("|"), raw("echo"), raw("hello")];
 
-        let res = parse_input(input);
+        let res = split_commands(input);
 
         assert!(res.is_err());
         assert!(matches!(
@@ -261,9 +288,9 @@ mod tests {
         ));
 
         // Starting with a redirection.
-        let input = "2> err.txt echo hello";
+        let input = vec![raw("2>"), raw("err.txt"), raw("echo"), raw("hello")];
 
-        let res = parse_input(input);
+        let res = split_commands(input);
 
         assert!(res.is_err());
         assert!(matches!(
@@ -272,28 +299,17 @@ mod tests {
         ));
 
         // Ending with a pipe.
-        let input = "echo hello |";
+        let input = vec![raw("echo"), raw("hello"), raw("|")];
 
-        let res = parse_input(input);
+        let res = split_commands(input);
 
         assert!(res.is_err());
         assert!(matches!(res.err().unwrap(), SplittingError::DanglingPipe));
 
         // Missing redirection destination.
-        let input = "echo hello >";
+        let input = vec![raw("echo"), raw("hello"), raw(">")];
 
-        let res = parse_input(input);
-
-        assert!(res.is_err());
-        assert!(matches!(
-            res.err().unwrap(),
-            SplittingError::MissingRedirectDestination
-        ));
-
-        // Missing redirection destination.
-        let input = "echo hello > | grep world";
-
-        let res = parse_input(input);
+        let res = split_commands(input);
 
         assert!(res.is_err());
         assert!(matches!(
@@ -302,9 +318,20 @@ mod tests {
         ));
 
         // Missing redirection destination.
-        let input = "echo hello > 2> err.txt";
+        let input = vec![raw("echo"), raw("hello"), raw(">"), raw("|"), raw("grep"), raw("world")];
 
-        let res = parse_input(input);
+        let res = split_commands(input);
+
+        assert!(res.is_err());
+        assert!(matches!(
+            res.err().unwrap(),
+            SplittingError::MissingRedirectDestination
+        ));
+
+        // Missing redirection destination.
+        let input = vec![raw("echo"), raw("hello"), raw(">"), raw("2>"), raw("err.txt")];
+
+        let res = split_commands(input);
 
         assert!(res.is_err());
         assert!(matches!(
