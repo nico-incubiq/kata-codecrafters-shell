@@ -1,20 +1,22 @@
-use crate::quoting::{split_quoted_string, InputChunk, QuotingError};
+use crate::parser::quoting::{split_quoted_string, InputChunk, QuotingError};
 use regex::Regex;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub(crate) enum ParsingError {
+pub(crate) enum SplittingError {
     #[error(transparent)]
     Quoting(#[from] QuotingError),
 
     #[error("Expected program, got: {0}")]
     ProgramExpected(String),
-    // #[error("Invalid IO descriptor: {0}")]
-    // InvalidIoDescriptor(String),
+
     #[error("Dangling pipe, the command is not terminated")]
     DanglingPipe,
+
     #[error("Missing redirect destination")]
     MissingRedirectDestination,
+    // #[error("Invalid IO descriptor: {0}")]
+    // InvalidIoDescriptor(String),
 }
 
 /// An IO redirection.
@@ -33,6 +35,7 @@ pub(crate) enum RedirectDestination {
     File(String),
 }
 
+/// A command with its arguments and redirections in the order they were specified.
 pub(crate) struct Command {
     program: String,
     arguments: Vec<String>,
@@ -54,7 +57,7 @@ impl Command {
 // -  echo hello '|' world 1>&2 2> out.txt : writes to stdout, because 1>&2 writes to stderr before the redirection is set up
 
 /// Parses the input string into a list of commands piped into each other.
-pub(crate) fn parse_input(input: &str) -> Result<Vec<Command>, ParsingError> {
+pub(crate) fn parse_input(input: &str) -> Result<Vec<Command>, SplittingError> {
     let values = split_quoted_string(input)?;
 
     if values.is_empty() {
@@ -89,11 +92,11 @@ pub(crate) fn parse_input(input: &str) -> Result<Vec<Command>, ParsingError> {
                         current_args = vec![];
                         current_redirections = vec![];
                     } else {
-                        return Err(ParsingError::ProgramExpected(text));
+                        return Err(SplittingError::ProgramExpected(text));
                     }
-                } else if let Some(groups) = redirection_regex.captures(&text){
+                } else if let Some(groups) = redirection_regex.captures(&text) {
                     if current_program.is_none() {
-                        return Err(ParsingError::ProgramExpected(text));
+                        return Err(SplittingError::ProgramExpected(text));
                     }
 
                     let descriptor: u8 = match groups.name("from") {
@@ -115,24 +118,31 @@ pub(crate) fn parse_input(input: &str) -> Result<Vec<Command>, ParsingError> {
                             //     ParsingError::InvalidIoDescriptor(descriptor.as_str()[1..].to_string())
                             // })?;
                             RedirectDestination::Descriptor(descriptor)
-                        },
+                        }
                         None => {
-                            let filename = match iter.next().ok_or(ParsingError::MissingRedirectDestination)? {
+                            let filename = match iter
+                                .next()
+                                .ok_or(SplittingError::MissingRedirectDestination)?
+                            {
                                 InputChunk::QuotedText(text) => text,
                                 InputChunk::RawText(text) => {
                                     if text == "|" || redirection_regex.is_match(&text) {
-                                        return Err(ParsingError::MissingRedirectDestination);
+                                        return Err(SplittingError::MissingRedirectDestination);
                                     }
 
                                     text
-                                },
+                                }
                             };
 
                             RedirectDestination::File(filename)
-                        },
+                        }
                     };
 
-                    current_redirections.push(Redirect{ descriptor, overwrite, destination})
+                    current_redirections.push(Redirect {
+                        descriptor,
+                        overwrite,
+                        destination,
+                    })
                 } else {
                     if current_program.is_none() {
                         current_program = Some(text);
@@ -147,7 +157,7 @@ pub(crate) fn parse_input(input: &str) -> Result<Vec<Command>, ParsingError> {
     if let Some(program) = current_program {
         commands.push(Command::new(program, current_args, current_redirections));
     } else {
-        return Err(ParsingError::DanglingPipe)
+        return Err(SplittingError::DanglingPipe);
     }
 
     Ok(commands)
@@ -155,7 +165,7 @@ pub(crate) fn parse_input(input: &str) -> Result<Vec<Command>, ParsingError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{parse_input, RedirectDestination, SplittingError};
 
     #[test]
     fn it_parses_single_command_without_redirect() {
@@ -256,7 +266,7 @@ mod tests {
         assert!(res.is_err());
         assert!(matches!(
             res.err().unwrap(),
-            ParsingError::ProgramExpected(found) if found == "|"
+            SplittingError::ProgramExpected(found) if found == "|"
         ));
 
         // Starting with a redirection.
@@ -267,7 +277,7 @@ mod tests {
         assert!(res.is_err());
         assert!(matches!(
             res.err().unwrap(),
-            ParsingError::ProgramExpected(found) if found == "2>"
+            SplittingError::ProgramExpected(found) if found == "2>"
         ));
 
         // Ending with a pipe.
@@ -276,10 +286,7 @@ mod tests {
         let res = parse_input(input);
 
         assert!(res.is_err());
-        assert!(matches!(
-            res.err().unwrap(),
-            ParsingError::DanglingPipe
-        ));
+        assert!(matches!(res.err().unwrap(), SplittingError::DanglingPipe));
 
         // Missing redirection destination.
         let input = "echo hello >";
@@ -289,7 +296,7 @@ mod tests {
         assert!(res.is_err());
         assert!(matches!(
             res.err().unwrap(),
-            ParsingError::MissingRedirectDestination
+            SplittingError::MissingRedirectDestination
         ));
 
         // Missing redirection destination.
@@ -300,7 +307,7 @@ mod tests {
         assert!(res.is_err());
         assert!(matches!(
             res.err().unwrap(),
-            ParsingError::MissingRedirectDestination
+            SplittingError::MissingRedirectDestination
         ));
 
         // Missing redirection destination.
@@ -311,7 +318,7 @@ mod tests {
         assert!(res.is_err());
         assert!(matches!(
             res.err().unwrap(),
-            ParsingError::MissingRedirectDestination
+            SplittingError::MissingRedirectDestination
         ));
 
         // TODO: Decide if we want to prevent those.

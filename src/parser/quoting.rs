@@ -133,7 +133,7 @@ fn is_arg_boundary(
 
 #[cfg(test)]
 mod tests {
-    use crate::quoting::{split_quoted_string, InputChunk, QuotingError};
+    use super::{split_quoted_string, InputChunk, QuotingError};
 
     trait VecDisplay {
         fn display(&self) -> Vec<String>;
@@ -141,10 +141,12 @@ mod tests {
 
     impl VecDisplay for Vec<InputChunk> {
         fn display(&self) -> Vec<String> {
-            self.iter().map(|chunk| match chunk {
-                InputChunk::RawText(text) => text.clone(),
-                InputChunk::QuotedText(text) => format!("[[{}]]", text.clone()),
-            }).collect()
+            self.iter()
+                .map(|chunk| match chunk {
+                    InputChunk::RawText(text) => text.clone(),
+                    InputChunk::QuotedText(text) => format!("[[{}]]", text.clone()),
+                })
+                .collect()
         }
     }
 
@@ -166,7 +168,9 @@ mod tests {
         // Don't split at spaces within single-quoted strings.
         assert_eq!(
             vec!["hello", "[[to the world]]", "[[from ]]", "me"],
-            split_quoted_string("hello 'to the world'     'from ' me").unwrap().display()
+            split_quoted_string("hello 'to the world'     'from ' me")
+                .unwrap()
+                .display()
         );
 
         // Don't split args at single quotes if not surrounded by spaces.
@@ -195,7 +199,9 @@ mod tests {
         // Don't split at spaces within double-quoted strings.
         assert_eq!(
             vec!["hello", "[[to the world]]", "[[from ]]", "me"],
-            split_quoted_string(r#"hello "to the world"     "from " me"#).unwrap().display()
+            split_quoted_string(r#"hello "to the world"     "from " me"#)
+                .unwrap()
+                .display()
         );
 
         // Don't split args at double quotes if not surrounded by spaces.
@@ -209,7 +215,9 @@ mod tests {
         );
         assert_eq!(
             vec!["hello", "[[world oh]]"],
-            split_quoted_string(r#"hello wo"rld "oh"#).unwrap().display()
+            split_quoted_string(r#"hello wo"rld "oh"#)
+                .unwrap()
+                .display()
         );
         assert_eq!(
             vec!["[[hello]]", "[[world]]"],
@@ -217,7 +225,9 @@ mod tests {
         );
         assert_eq!(
             vec!["hello", "[[123456]]", "world"],
-            split_quoted_string(r#"hello "123""456" world"#).unwrap().display()
+            split_quoted_string(r#"hello "123""456" world"#)
+                .unwrap()
+                .display()
         );
     }
 
@@ -226,17 +236,23 @@ mod tests {
         // Preserve double-quotes.
         assert_eq!(
             vec!["hello", r#"[[to "the" world]]"#],
-            split_quoted_string(r#"hello 'to "the" world'"#).unwrap().display()
+            split_quoted_string(r#"hello 'to "the" world'"#)
+                .unwrap()
+                .display()
         );
 
         // Preserve backslashes.
         assert_eq!(
             vec![r#"[[hello\\\\world]]"#],
-            split_quoted_string(r#"'hello\\\\world'"#).unwrap().display()
+            split_quoted_string(r#"'hello\\\\world'"#)
+                .unwrap()
+                .display()
         );
         assert_eq!(
             vec!["hello", r#"[[to \"the\" world]]"#],
-            split_quoted_string(r#"hello 'to \"the\" world'"#).unwrap().display()
+            split_quoted_string(r#"hello 'to \"the\" world'"#)
+                .unwrap()
+                .display()
         );
     }
 
@@ -245,7 +261,9 @@ mod tests {
         // Preserve single-quotes.
         assert_eq!(
             vec!["hello", "[[to 'the' world]]"],
-            split_quoted_string(r#"hello "to 'the' world""#).unwrap().display()
+            split_quoted_string(r#"hello "to 'the' world""#)
+                .unwrap()
+                .display()
         );
         assert_eq!(
             vec!["hello", "[[wo'r'ld]]"],
@@ -258,7 +276,9 @@ mod tests {
         // Escape double-quotes.
         assert_eq!(
             vec!["hello", r#"[[to "the" world]]"#],
-            split_quoted_string(r#"hello "to \"the\" world""#).unwrap().display()
+            split_quoted_string(r#"hello "to \"the\" world""#)
+                .unwrap()
+                .display()
         );
 
         // Escape backslash.
@@ -280,7 +300,8 @@ mod tests {
                 r#"hello "to the \
 world""#
             )
-            .unwrap().display()
+            .unwrap()
+            .display()
         );
 
         // Does NOT escape backslash if not followed by one of \, ", $.
@@ -295,7 +316,9 @@ world""#
         // Escape whitespace.
         assert_eq!(
             vec!["hello   world"],
-            split_quoted_string(r#"hello\ \ \ world"#).unwrap().display()
+            split_quoted_string(r#"hello\ \ \ world"#)
+                .unwrap()
+                .display()
         );
 
         // Escape single-quoting.
@@ -317,7 +340,8 @@ world""#
                 r#"hello to \
 the world"#
             )
-            .unwrap().display()
+            .unwrap()
+            .display()
         );
 
         // Escape backslash.
