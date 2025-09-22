@@ -1,10 +1,11 @@
-use crate::io_redirection::{IoRedirectionError, IoRedirections};
 use is_executable::IsExecutable;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env::VarError;
+use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use thiserror::Error;
+use crate::parser::Descriptor;
 
 #[derive(Error, Debug)]
 pub(crate) enum PathError {
@@ -16,15 +17,12 @@ pub(crate) enum PathError {
 
     #[error("Failed to read environment variable: {0}")]
     GetEnvFailed(#[from] VarError),
-
-    #[error("Failed setting up standard I/O redirection: {0}")]
-    IoRedirectionFailed(#[from] IoRedirectionError),
 }
 
 pub(crate) fn run_binary(
     cmd: &str,
     args: &[String],
-    io_redirections: &mut IoRedirections,
+    descriptors: &mut HashMap<Descriptor, Box<dyn Write>>,
 ) -> Result<(), PathError> {
     let mut command = Command::new(cmd);
 
@@ -32,7 +30,11 @@ pub(crate) fn run_binary(
     command.args(args);
 
     // Redirect standard output and error.
-    command.stdout(io_redirections.stdout_as_stdio()?);
+    //TODO:
+    // - Create an IO struct rather than passing Box<dyn Write>, as we need to impl Into<Stdio>
+    // - Ensure it plays well with having multiple &mut, maybe impl Clone?
+    // - Rust Command only supports stdout and stderr, not arbitrary descriptors, enforce this at parsing.
+    command.stdout(&mut descriptors.get(&Descriptor::new(1)).unwrap_or(&mut stdout()));
     command.stderr(io_redirections.stderr_as_stdio()?);
 
     // Start the program in a thread and wait for it to finish, ignoring the exit status.
@@ -47,7 +49,7 @@ pub(crate) fn run_binary(
     Ok(())
 }
 
-/// Finds a file which name is an exact match in the user PATH.
+/// Finds a file whose name is an exact match in the user PATH.
 pub(crate) fn find_file_in_path(name: &str) -> Result<Option<PathBuf>, PathError> {
     // Check whether the file exists in any of the directories.
     let location = get_path_directories()?

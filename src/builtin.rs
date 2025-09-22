@@ -1,6 +1,6 @@
-use crate::io_redirection::{IoRedirectionError, IoRedirections};
 use crate::path::{find_file_in_path, PathError};
 use std::env::VarError;
+use std::io::Write;
 use std::num::ParseIntError;
 use strum_macros::{Display, EnumString, VariantNames};
 use thiserror::Error;
@@ -22,9 +22,6 @@ pub(crate) enum BuiltInCommandError {
     #[error("Invalid exit code '{0}': {1}")]
     InvalidExitCode(String, ParseIntError),
 
-    #[error(transparent)]
-    WriteLineFailed(#[from] IoRedirectionError),
-
     #[error("Failed to search executable in PATH: {0}")]
     FindInPathFailed(#[from] PathError),
 
@@ -36,6 +33,13 @@ pub(crate) enum BuiltInCommandError {
 
     #[error("Failed to determine the current working directory: {0}")]
     GetCurrentDirectoryFailed(#[source] std::io::Error),
+
+    #[error("Failed to write builtin command output: {0}")]
+    WriteFailed(#[from] std::io::Error),
+
+    // Special error type to denote the program should exit.
+    #[error("Exiting program with code: {0}")]
+    Exit(i32),
 }
 
 pub(crate) fn try_into_builtin(command: &str) -> Result<BuiltInCommand, BuiltInCommandError> {
@@ -65,7 +69,7 @@ impl BuiltInCommand {
     pub(crate) fn run(
         &self,
         args: &[String],
-        io_redirections: &mut IoRedirections,
+        stdout: &mut impl Write,
     ) -> Result<(), BuiltInCommandError> {
         match self {
             BuiltInCommand::ChangeDirectory => {
@@ -81,7 +85,7 @@ impl BuiltInCommand {
                     .map_err(|e| BuiltInCommandError::ChangeDirectoryFailed(working_dir, e))?;
             }
             BuiltInCommand::Echo => {
-                io_redirections.writeln(format_args!("{}", args.join(" ")))?;
+                stdout.write_fmt(format_args!("{}\n", args.join(" ")))?;
             }
             BuiltInCommand::Exit => {
                 let arg = get_single_argument(args)?;
@@ -90,8 +94,7 @@ impl BuiltInCommand {
                     .parse::<i32>()
                     .map_err(|e| BuiltInCommandError::InvalidExitCode(arg, e))?;
 
-                // TODO: Not the cleanest way to exit the repl loop, as it doesn't perform any cleanup.
-                std::process::exit(exit_code);
+                return Err(BuiltInCommandError::Exit(exit_code));
             }
             BuiltInCommand::PrintWorkingDirectory => {
                 if !args.is_empty() {
@@ -104,15 +107,15 @@ impl BuiltInCommand {
                 let cwd = std::env::current_dir()
                     .map_err(BuiltInCommandError::GetCurrentDirectoryFailed)?;
 
-                io_redirections.writeln(format_args!("{}", &cwd.display()))?;
+                stdout.write_fmt(format_args!("{}\n", &cwd.display()))?;
             }
             BuiltInCommand::Type => {
                 let arg = get_single_argument(args)?;
 
                 if let Ok(sub_command) = try_into_builtin(arg.as_ref()) {
-                    io_redirections.writeln(format_args!("{sub_command} is a shell builtin"))?;
+                    stdout.write_fmt(format_args!("{sub_command} is a shell builtin\n"))?;
                 } else if let Some(location) = find_file_in_path(&arg)? {
-                    io_redirections.writeln(format_args!("{} is {}", arg, location.display()))?;
+                    stdout.write_fmt(format_args!("{} is {}\n", arg, location.display()))?;
                 } else {
                     return Err(BuiltInCommandError::PathCommandNotFound(arg));
                 }

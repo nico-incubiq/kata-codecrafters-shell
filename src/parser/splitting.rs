@@ -1,4 +1,5 @@
 use crate::parser::quoting::InputChunk;
+use crate::parser::{Command, Descriptor, Redirect, RedirectDestination};
 use regex::Regex;
 use thiserror::Error;
 
@@ -12,41 +13,6 @@ pub(crate) enum SplittingError {
 
     #[error("Missing redirect destination")]
     MissingRedirectDestination,
-    // #[error("Invalid IO descriptor: {0}")]
-    // InvalidIoDescriptor(String),
-}
-
-/// An IO redirection.
-pub(crate) struct Redirect {
-    /// The IO descriptor.
-    /// 0: input (unsupported), 1: output, 2: error, custom (unsupported)
-    descriptor: u8,
-    overwrite: bool,
-    destination: RedirectDestination,
-}
-
-/// The destination of an IO redirection.
-#[derive(PartialEq, Debug)]
-pub(crate) enum RedirectDestination {
-    Descriptor(u8),
-    File(String),
-}
-
-/// A command with its arguments and redirections in the order they were specified.
-pub(crate) struct Command {
-    program: String,
-    arguments: Vec<String>,
-    redirects: Vec<Redirect>,
-}
-
-impl Command {
-    fn new(program: String, arguments: Vec<String>, redirects: Vec<Redirect>) -> Self {
-        Self {
-            program,
-            arguments,
-            redirects,
-        }
-    }
 }
 
 //TODO: test this in another module
@@ -94,7 +60,7 @@ pub(crate) fn split_commands(chunks: Vec<InputChunk>) -> Result<Vec<Command>, Sp
                         return Err(SplittingError::ProgramExpected(text));
                     }
 
-                    let descriptor: u8 = groups
+                    let descriptor_id: u8 = groups
                         .name("from")
                         // Safe to unwrap as the regex only matches digits.
                         .map_or(1, |m| m.as_str().parse().unwrap());
@@ -103,11 +69,8 @@ pub(crate) fn split_commands(chunks: Vec<InputChunk>) -> Result<Vec<Command>, Sp
 
                     let destination = if let Some(descriptor) = groups.name("to") {
                         // Safe to unwrap as the regex only matches digits.
-                        let descriptor: u8 = descriptor.as_str()[1..].parse().unwrap();
-                        // .map_err(|_| {
-                        //     ParsingError::InvalidIoDescriptor(descriptor.as_str()[1..].to_string())
-                        // })?;
-                        RedirectDestination::Descriptor(descriptor)
+                        let descriptor_id: u8 = descriptor.as_str()[1..].parse().unwrap();
+                        RedirectDestination::Descriptor(Descriptor(descriptor_id))
                     } else {
                         let filename = match iter
                             .next()
@@ -127,7 +90,7 @@ pub(crate) fn split_commands(chunks: Vec<InputChunk>) -> Result<Vec<Command>, Sp
                     };
 
                     current_redirections.push(Redirect {
-                        descriptor,
+                        descriptor: Descriptor(descriptor_id),
                         overwrite,
                         destination,
                     });
@@ -153,6 +116,7 @@ pub(crate) fn split_commands(chunks: Vec<InputChunk>) -> Result<Vec<Command>, Sp
 mod tests {
     use super::{split_commands, RedirectDestination, SplittingError};
     use crate::parser::quoting::InputChunk;
+    use crate::parser::Descriptor;
 
     fn raw(text: &str) -> InputChunk {
         InputChunk::RawText(text.to_owned())
@@ -205,12 +169,12 @@ mod tests {
         assert_eq!(1, commands.len());
         assert_eq!(1, commands[0].arguments.len());
         assert_eq!(2, commands[0].redirects.len());
-        assert_eq!(1, commands[0].redirects[0].descriptor);
+        assert_eq!(Descriptor(1), commands[0].redirects[0].descriptor);
         assert_eq!(
             RedirectDestination::File("out.txt".to_owned()),
             commands[0].redirects[0].destination
         );
-        assert_eq!(2, commands[0].redirects[1].descriptor);
+        assert_eq!(Descriptor(2), commands[0].redirects[1].descriptor);
         assert_eq!(
             RedirectDestination::File("err.txt".to_owned()),
             commands[0].redirects[1].destination
@@ -246,9 +210,9 @@ mod tests {
 
         assert_eq!(1, commands.len());
         assert_eq!(1, commands[0].redirects.len());
-        assert_eq!(1, commands[0].redirects[0].descriptor);
+        assert_eq!(Descriptor(1), commands[0].redirects[0].descriptor);
         assert_eq!(
-            RedirectDestination::Descriptor(2),
+            RedirectDestination::Descriptor(Descriptor(2)),
             commands[0].redirects[0].destination
         );
     }
@@ -318,7 +282,14 @@ mod tests {
         ));
 
         // Missing redirection destination.
-        let input = vec![raw("echo"), raw("hello"), raw(">"), raw("|"), raw("grep"), raw("world")];
+        let input = vec![
+            raw("echo"),
+            raw("hello"),
+            raw(">"),
+            raw("|"),
+            raw("grep"),
+            raw("world"),
+        ];
 
         let res = split_commands(input);
 
@@ -329,7 +300,13 @@ mod tests {
         ));
 
         // Missing redirection destination.
-        let input = vec![raw("echo"), raw("hello"), raw(">"), raw("2>"), raw("err.txt")];
+        let input = vec![
+            raw("echo"),
+            raw("hello"),
+            raw(">"),
+            raw("2>"),
+            raw("err.txt"),
+        ];
 
         let res = split_commands(input);
 
@@ -338,39 +315,5 @@ mod tests {
             res.err().unwrap(),
             SplittingError::MissingRedirectDestination
         ));
-
-        // TODO: Decide if we want to prevent those.
-        // // Invalid from descriptor.
-        // let input = "echo hello A> out.txt";
-        //
-        // let res = parse_input(input);
-        //
-        // assert!(res.is_err());
-        // assert!(matches!(
-        //     res.err().unwrap(),
-        //     ParsingError::InvalidIoDescriptor(a) if a == "A"
-        // ));
-        //
-        // // Invalid destination descriptor.
-        // let input = "echo hello >&A out.txt";
-        //
-        // let res = parse_input(input);
-        //
-        // assert!(res.is_err());
-        // assert!(matches!(
-        //     res.err().unwrap(),
-        //     ParsingError::InvalidIoDescriptor(a) if a == "A"
-        // ));
-        //
-        // // Missing destination descriptor.
-        // let input = "echo hello >& out.txt";
-        //
-        // let res = parse_input(input);
-        //
-        // assert!(res.is_err());
-        // assert!(matches!(
-        //     res.err().unwrap(),
-        //     ParsingError::InvalidIoDescriptor(a) if a == ""
-        // ));
     }
 }
