@@ -25,7 +25,7 @@ REPLs, builtin commands, and more.
 - Double-quotes, with escaping (no variable expansion)
 
 ## Redirection
-- Stdout and Stderr redirection
+- Stdout and Stderr redirection (Rust's native Command only supports those)
 - Overriding with `>` and appending with `>>` (must be surrounded by spaces)
 - Piping commands with `|` (must be surrounded by spaces)
 

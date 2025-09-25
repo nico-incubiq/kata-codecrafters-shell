@@ -1,11 +1,11 @@
+use crate::io::FileDescriptor;
+use crate::parser::Descriptor;
 use is_executable::IsExecutable;
 use std::collections::{HashMap, HashSet};
 use std::env::VarError;
-use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use thiserror::Error;
-use crate::parser::Descriptor;
 
 #[derive(Error, Debug)]
 pub(crate) enum PathError {
@@ -22,7 +22,7 @@ pub(crate) enum PathError {
 pub(crate) fn run_binary(
     cmd: &str,
     args: &[String],
-    descriptors: &mut HashMap<Descriptor, Box<dyn Write>>,
+    mut descriptors: HashMap<Descriptor, FileDescriptor>,
 ) -> Result<(), PathError> {
     let mut command = Command::new(cmd);
 
@@ -30,12 +30,15 @@ pub(crate) fn run_binary(
     command.args(args);
 
     // Redirect standard output and error.
-    //TODO:
-    // - Create an IO struct rather than passing Box<dyn Write>, as we need to impl Into<Stdio>
-    // - Ensure it plays well with having multiple &mut, maybe impl Clone?
-    // - Rust Command only supports stdout and stderr, not arbitrary descriptors, enforce this at parsing.
-    command.stdout(&mut descriptors.get(&Descriptor::new(1)).unwrap_or(&mut stdout()));
-    command.stderr(io_redirections.stderr_as_stdio()?);
+    let stdout = descriptors
+        .remove(&Descriptor::new(1))
+        .unwrap_or(FileDescriptor::stdout());
+    let stderr = descriptors
+        .remove(&Descriptor::new(2))
+        .unwrap_or(FileDescriptor::stderr());
+
+    command.stdout(stdout);
+    command.stderr(stderr);
 
     // Start the program in a thread and wait for it to finish, ignoring the exit status.
     let _ = command.status().map_err(|e| {

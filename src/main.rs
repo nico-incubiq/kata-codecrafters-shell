@@ -1,7 +1,7 @@
 mod autocomplete;
 mod builtin;
 mod input;
-mod io_redirection;
+mod io;
 mod parser;
 mod path;
 mod runner;

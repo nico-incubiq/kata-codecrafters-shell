@@ -1,5 +1,5 @@
-use thiserror::Error;
 use crate::parser::quoting::QuotingError;
+use thiserror::Error;
 
 mod quoting;
 mod splitting;

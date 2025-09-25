@@ -15,17 +15,13 @@ pub(crate) enum SplittingError {
     MissingRedirectDestination,
 }
 
-//TODO: test this in another module
-// -  echo hello '|' world 2> out.txt 1>&2 : writes to out.txt
-// -  echo hello '|' world 1>&2 2> out.txt : writes to stdout, because 1>&2 writes to stderr before the redirection is set up
-
 /// Parses the input string into a list of commands piped into each other.
 pub(crate) fn split_commands(chunks: Vec<InputChunk>) -> Result<Vec<Command>, SplittingError> {
     if chunks.is_empty() {
         return Ok(vec![]);
     }
 
-    let redirection_regex = Regex::new(r"^(?<from>\d+)?>(?<overwrite>>)?(?<to>&\d+)?$").unwrap();
+    let redirection_regex = Regex::new(r"^(?<from>[12])?>(?<overwrite>>)?(?<to>&[12])?$").unwrap();
 
     let mut commands = vec![];
 

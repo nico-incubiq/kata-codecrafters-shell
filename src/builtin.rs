@@ -1,3 +1,4 @@
+use crate::io::FileDescriptor;
 use crate::path::{find_file_in_path, PathError};
 use std::env::VarError;
 use std::io::Write;
@@ -69,7 +70,7 @@ impl BuiltInCommand {
     pub(crate) fn run(
         &self,
         args: &[String],
-        stdout: &mut impl Write,
+        stdout: &mut FileDescriptor,
     ) -> Result<(), BuiltInCommandError> {
         match self {
             BuiltInCommand::ChangeDirectory => {
