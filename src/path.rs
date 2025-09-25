@@ -31,11 +31,11 @@ pub(crate) fn run_binary(
 
     // Redirect standard output and error.
     let stdout = descriptors
-        .remove(&Descriptor::new(1))
-        .unwrap_or(FileDescriptor::stdout());
+        .remove(&Descriptor::stdout())
+        .unwrap_or_else(FileDescriptor::stdout);
     let stderr = descriptors
-        .remove(&Descriptor::new(2))
-        .unwrap_or(FileDescriptor::stderr());
+        .remove(&Descriptor::stderr())
+        .unwrap_or_else(FileDescriptor::stderr);
 
     command.stdout(stdout);
     command.stderr(stderr);

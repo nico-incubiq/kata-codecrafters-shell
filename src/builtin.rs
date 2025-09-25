@@ -1,5 +1,7 @@
 use crate::io::FileDescriptor;
+use crate::parser::Descriptor;
 use crate::path::{find_file_in_path, PathError};
+use std::collections::HashMap;
 use std::env::VarError;
 use std::io::Write;
 use std::num::ParseIntError;
@@ -70,8 +72,12 @@ impl BuiltInCommand {
     pub(crate) fn run(
         &self,
         args: &[String],
-        stdout: &mut FileDescriptor,
+        mut descriptors: HashMap<Descriptor, FileDescriptor>,
     ) -> Result<(), BuiltInCommandError> {
+        let mut stdout = descriptors
+            .remove(&Descriptor::stdout())
+            .unwrap_or_else(FileDescriptor::stdout);
+
         match self {
             BuiltInCommand::ChangeDirectory => {
                 let arg = get_single_argument(args)?;

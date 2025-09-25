@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{stderr, stdout, Stderr, Stdout, Write};
 use std::process::Stdio;
 use thiserror::Error;
+use crate::parser::{Descriptor, Redirect};
 
 #[derive(Error, Debug)]
 pub(crate) enum IoError {
@@ -13,7 +15,7 @@ pub(crate) enum IoError {
 pub(crate) enum FileDescriptor {
     Stdout(Stdout),
     Stderr(Stderr),
-    //TODO: wrap file in a BufWriter?
+    //TODO: a BufWriter would be efficient for writing, but cannot be converted into Stdio required by process::Command
     File(String, File),
 }
 
@@ -61,3 +63,15 @@ impl Write for FileDescriptor {
         }
     }
 }
+
+pub(crate) fn resolve_redirects(redirects: &[Redirect]) -> HashMap<Descriptor, FileDescriptor> {
+    let mut descriptors: HashMap<Descriptor, FileDescriptor> = HashMap::new();
+    descriptors.insert(Descriptor::stdout(), FileDescriptor::stdout());
+    descriptors.insert(Descriptor::stderr(), FileDescriptor::stderr());
+
+    descriptors
+}
+
+//TODO: test this:
+// -  echo hello '|' world 2> out.txt 1>&2 : writes to out.txt
+// -  echo hello '|' world 1>&2 2> out.txt : writes to stdout, because 1>&2 writes to stderr before the redirection is set up

@@ -19,9 +19,12 @@ pub(crate) enum ParsingError {
 pub(crate) struct Descriptor(u8);
 
 impl Descriptor {
-    // TODO: Delete when not hardcoding anymore
-    pub(crate) fn new(id: u8) -> Self {
-        Self(id)
+    pub(crate) fn stdout() -> Self {
+        Self(1)
+    }
+
+    pub(crate) fn stderr() -> Self {
+        Self(2)
     }
 }
 
