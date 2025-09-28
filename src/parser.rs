@@ -14,9 +14,9 @@ pub(crate) enum ParsingError {
 }
 
 /// A file descriptor.
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(Debug))]
-pub(crate) struct Descriptor(u8);
+pub(crate) struct Descriptor(pub(crate) u8);
 
 impl Descriptor {
     pub(crate) fn stdout() -> Self {
@@ -39,14 +39,29 @@ pub(crate) struct Command {
 pub(crate) struct Redirect {
     /// The IO descriptor.
     /// 0: input (unsupported), 1: output, 2: error
-    descriptor: Descriptor,
-    overwrite: bool,
-    destination: RedirectDestination,
+    from: Descriptor,
+    to: RedirectTo,
+    append: bool,
+}
+
+impl Redirect {
+    pub(crate) fn from(&self) -> Descriptor {
+        self.from
+    }
+
+    pub(crate) fn to(&self) -> RedirectTo {
+        self.to.clone()
+    }
+
+    pub(crate) fn append(&self) -> bool {
+        self.append
+    }
 }
 
 /// The destination of an IO redirection.
+#[derive(Clone)]
 #[cfg_attr(test, derive(PartialEq, Debug))]
-pub(crate) enum RedirectDestination {
+pub(crate) enum RedirectTo {
     Descriptor(Descriptor),
     File(String),
 }

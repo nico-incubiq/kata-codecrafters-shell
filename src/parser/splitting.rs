@@ -1,5 +1,5 @@
 use crate::parser::quoting::InputChunk;
-use crate::parser::{Command, Descriptor, Redirect, RedirectDestination};
+use crate::parser::{Command, Descriptor, Redirect, RedirectTo};
 use regex::Regex;
 use thiserror::Error;
 
@@ -21,7 +21,7 @@ pub(crate) fn split_commands(chunks: Vec<InputChunk>) -> Result<Vec<Command>, Sp
         return Ok(vec![]);
     }
 
-    let redirection_regex = Regex::new(r"^(?<from>[12])?>(?<overwrite>>)?(?<to>&[12])?$").unwrap();
+    let redirection_regex = Regex::new(r"^(?<from>\d+)?>(?<append>>)?(?<to>&\d+)?$").unwrap();
 
     let mut commands = vec![];
 
@@ -61,12 +61,12 @@ pub(crate) fn split_commands(chunks: Vec<InputChunk>) -> Result<Vec<Command>, Sp
                         // Safe to unwrap as the regex only matches digits.
                         .map_or(1, |m| m.as_str().parse().unwrap());
 
-                    let overwrite = groups.name("overwrite").is_some();
+                    let append = groups.name("append").is_some();
 
                     let destination = if let Some(descriptor) = groups.name("to") {
                         // Safe to unwrap as the regex only matches digits.
                         let descriptor_id: u8 = descriptor.as_str()[1..].parse().unwrap();
-                        RedirectDestination::Descriptor(Descriptor(descriptor_id))
+                        RedirectTo::Descriptor(Descriptor(descriptor_id))
                     } else {
                         let filename = match iter
                             .next()
@@ -82,13 +82,13 @@ pub(crate) fn split_commands(chunks: Vec<InputChunk>) -> Result<Vec<Command>, Sp
                             }
                         };
 
-                        RedirectDestination::File(filename)
+                        RedirectTo::File(filename)
                     };
 
                     current_redirections.push(Redirect {
-                        descriptor: Descriptor(descriptor_id),
-                        overwrite,
-                        destination,
+                        from: Descriptor(descriptor_id),
+                        append,
+                        to: destination,
                     });
                 } else if current_program.is_none() {
                     current_program = Some(text);
@@ -110,7 +110,7 @@ pub(crate) fn split_commands(chunks: Vec<InputChunk>) -> Result<Vec<Command>, Sp
 
 #[cfg(test)]
 mod tests {
-    use super::{split_commands, RedirectDestination, SplittingError};
+    use super::{split_commands, RedirectTo, SplittingError};
     use crate::parser::quoting::InputChunk;
     use crate::parser::Descriptor;
 
@@ -165,15 +165,15 @@ mod tests {
         assert_eq!(1, commands.len());
         assert_eq!(1, commands[0].arguments.len());
         assert_eq!(2, commands[0].redirects.len());
-        assert_eq!(Descriptor(1), commands[0].redirects[0].descriptor);
+        assert_eq!(Descriptor(1), commands[0].redirects[0].from);
         assert_eq!(
-            RedirectDestination::File("out.txt".to_owned()),
-            commands[0].redirects[0].destination
+            RedirectTo::File("out.txt".to_owned()),
+            commands[0].redirects[0].to
         );
-        assert_eq!(Descriptor(2), commands[0].redirects[1].descriptor);
+        assert_eq!(Descriptor(2), commands[0].redirects[1].from);
         assert_eq!(
-            RedirectDestination::File("err.txt".to_owned()),
-            commands[0].redirects[1].destination
+            RedirectTo::File("err.txt".to_owned()),
+            commands[0].redirects[1].to
         );
     }
 
@@ -206,22 +206,22 @@ mod tests {
 
         assert_eq!(1, commands.len());
         assert_eq!(1, commands[0].redirects.len());
-        assert_eq!(Descriptor(1), commands[0].redirects[0].descriptor);
+        assert_eq!(Descriptor(1), commands[0].redirects[0].from);
         assert_eq!(
-            RedirectDestination::Descriptor(Descriptor(2)),
-            commands[0].redirects[0].destination
+            RedirectTo::Descriptor(Descriptor(2)),
+            commands[0].redirects[0].to
         );
     }
 
     #[test]
-    fn it_parses_overwrite_redirections() {
+    fn it_parses_append_redirections() {
         let input = vec![raw("echo"), raw("hello"), raw(">>"), raw("out.txt")];
 
         let commands = split_commands(input).unwrap();
 
         assert_eq!(1, commands.len());
         assert_eq!(1, commands[0].redirects.len());
-        assert!(commands[0].redirects[0].overwrite);
+        assert!(commands[0].redirects[0].append);
     }
 
     #[test]

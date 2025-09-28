@@ -38,4 +38,4 @@ REPLs, builtin commands, and more.
 
 # TODO: Improvements
 - Custom prompt (git status, ...)
-- Command history Ctrl+R
+- Command history Ctrl+R using a Trie for fast search
